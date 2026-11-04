@@ -84,3 +84,14 @@ inline void* sb_host_alloc(size_t n) { return sb_tracker().add(n); }
 inline void sb_host_free(void* p) { sb_tracker().erase(p); }
 inline void* sb_host_realloc(void* p, size_t n) { return sb_tracker().grow(p, n); }
 inline size_t sb_malloc_usable_size(void* p) { return sb_tracker().size_of(p); }
+
+// Mocks do runtime de execucao (recomp64_cpu): no teste, o "guest" que roda
+// numa thread do guest e uma funcao do host com a mesma assinatura.
+inline void dispatch(CPU* c, uint64_t addr) {
+    reinterpret_cast<void (*)(CPU*)>(addr)(c);
+}
+inline CPU* sb_new_guest_cpu() {
+    static CPU cpu;
+    memset(&cpu, 0, sizeof(cpu));
+    return &cpu;
+}

@@ -15,6 +15,10 @@ constexpr uint32_t OPEN_EXISTING = 3u;
 constexpr uint32_t OPEN_ALWAYS = 4u;
 constexpr uint32_t FILE_ATTRIBUTE_DIRECTORY = 0x10u;
 constexpr uint32_t INVALID_HANDLE = 0xFFFFFFFFu;
+constexpr uint32_t INFINITE = 0xFFFFFFFFu;
+constexpr uint32_t WAIT_OBJECT_0 = 0u;
+constexpr uint32_t WAIT_TIMEOUT = 0x102u;
+constexpr uint32_t WAIT_FAILED = 0xFFFFFFFFu;
 }  // namespace sb
 
 extern "C" {
@@ -38,6 +42,41 @@ void sb_shim_FindFirstFileExW(CPU* c);
 void sb_shim_FindNextFileW(CPU* c);
 void sb_shim_FindClose(CPU* c);
 void sb_shim_CreateFileMappingW(CPU* c);
+
+// kernel32_thread.cpp
+void sb_shim_CreateThread(CPU* c);
+void sb_shim_ExitThread(CPU* c);
+void sb_shim_GetCurrentThread(CPU* c);
+void sb_shim_GetCurrentThreadId(CPU* c);
+void sb_shim_GetCurrentProcess(CPU* c);
+void sb_shim_GetCurrentProcessId(CPU* c);
+void sb_shim_InitializeCriticalSection(CPU* c);
+void sb_shim_InitializeCriticalSectionAndSpinCount(CPU* c);
+void sb_shim_EnterCriticalSection(CPU* c);
+int  sb_shim_TryEnterCriticalSection(CPU* c);
+void sb_shim_LeaveCriticalSection(CPU* c);
+void sb_shim_DeleteCriticalSection(CPU* c);
+void sb_shim_InitializeSRWLock(CPU* c);
+void sb_shim_AcquireSRWLockExclusive(CPU* c);
+void sb_shim_ReleaseSRWLockExclusive(CPU* c);
+void sb_shim_AcquireSRWLockShared(CPU* c);
+void sb_shim_ReleaseSRWLockShared(CPU* c);
+void sb_shim_CreateEventW(CPU* c);
+void sb_shim_CreateEventA(CPU* c);
+void sb_shim_CreateEventExW(CPU* c);
+void sb_shim_SetEvent(CPU* c);
+void sb_shim_ResetEvent(CPU* c);
+void sb_shim_WaitForSingleObject(CPU* c);
+void sb_shim_Sleep(CPU* c);
+void sb_shim_SwitchToThread(CPU* c);
+void sb_shim_CreateMutexW(CPU* c);
+void sb_shim_CreateMutexA(CPU* c);
+void sb_shim_ReleaseMutex(CPU* c);
+void sb_shim_CreateSemaphoreExW(CPU* c);
+void sb_shim_ReleaseSemaphore(CPU* c);
+void sb_shim_InitializeSListHead(CPU* c);
+void sb_shim_SetThreadPriority(CPU* c);
+void sb_shim_SetThreadAffinityMask(CPU* c);
 
 // kernel32_memory.cpp
 void sb_shim_VirtualAlloc(CPU* c);

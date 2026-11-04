@@ -35,5 +35,10 @@ Build-And-Run "test_file" @(
     "runtime/src/shim/kernel32_file.cpp",
     "runtime/src/shim/test/test_file.cpp")
 
+Build-And-Run "test_thread" @(
+    "runtime/src/shim/kernel32_memory.cpp",
+    "runtime/src/shim/kernel32_thread.cpp",
+    "runtime/src/shim/test/test_thread.cpp")
+
 if ($fail) { Write-Host "`nFALHAS NOS TESTES" -ForegroundColor Red; exit 1 }
 Write-Host "`ntodos os testes de shim passaram" -ForegroundColor Green
