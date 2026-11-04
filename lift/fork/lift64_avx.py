@@ -294,6 +294,82 @@ def _scalar_vex(L, insn, m, ops, ea):
                     'wrxm(_a + 16, c->ymm[%d]); }' % (addr, n, n)]
         return ['wrxm(%s, c->xmm[%d]);' % (addr, n)]
 
+    # ---- SAD: psadbw / mpsadbw (memcmp/strcmp vetorizados inlineados) ------
+    # Semantica: SAD de 8 bytes por metade de 64 bits -> u16 em [15:0]/[79:64].
+    if vbase == 'psadbw' and len(ops) == 2:
+        d, s = ops
+        if not L._is_xmm(d):
+            return None
+        n = L._xi(d)
+        return ['{ const uint8_t* _pa = (const uint8_t*)&c->xmm[%d]; '
+                'XMM _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
+                'unsigned _s0 = 0, _s1 = 0; '
+                'for (int _i = 0; _i < 8; ++_i) { '
+                '  int _d0 = _pa[_i] - _pb[_i]; _s0 += (_d0 < 0 ? -_d0 : _d0); '
+                '  int _d1 = _pa[8 + _i] - _pb[8 + _i]; _s1 += (_d1 < 0 ? -_d1 : _d1); } '
+                'c->xmm[%d].u64[0] = _s0; c->xmm[%d].u64[1] = _s1; }'
+                % (n, L._xm(insn, s), n, n)]
+
+    if vbase == 'mpsadbw' and len(ops) == 3:
+        d, s1, s2 = ops
+        if not L._is_xmm(d) or s2.type != X86_OP_IMM:
+            return None
+        imm = s2.imm
+        if (imm >> 3) & 1:
+            return None                     # seletor cruzado: nao modelado
+        off = imm & 3                       # byte inicial dentro da metade
+        n = L._xi(d)
+        # 1a SAD na metade alta se imm[2]; a 2a sempre na outra metade
+        ha1 = 8 if (imm >> 2) & 1 else 0
+        ha2 = 0 if (imm >> 2) & 1 else 8
+        return ['{ const uint8_t* _pa = (const uint8_t*)&c->xmm[%d]; '
+                'XMM _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
+                'unsigned _s0 = 0, _s1 = 0; '
+                'for (int _i = 0; _i < 8; ++_i) { '
+                '  int _a0 = _pa[%d + _i] - _pb[%d + _i]; _s0 += (_a0 < 0 ? -_a0 : _a0); '
+                '  int _a1 = _pa[%d + _i] - _pb[%d + _i]; _s1 += (_a1 < 0 ? -_a1 : _a1); } '
+                'c->xmm[%d].u64[0] = _s0; c->xmm[%d].u64[1] = _s1; }'
+                % (n, L._xm(insn, s1), ha1 + off, ha1 + off, ha2 + off, ha2 + off,
+                   n, n)]
+
+    # conversoes escalares VEX: dst = cvt(src2), bits altos de src1
+    if len(ops) == 3 and vbase in ('cvtsd2ss', 'cvtss2sd'):
+        d, s1, s2 = ops
+        if not L._is_xmm(d):
+            return None
+        n = L._xi(d)
+        if vbase == 'cvtsd2ss':
+            return ['c->xmm[%d].f32[0] = (float)%s; '
+                    'c->xmm[%d].u32[1] = c->xmm[%d].u32[1]; '
+                    'c->xmm[%d].u64[1] = c->xmm[%d].u64[1];'
+                    % (n, L._sd(insn, s2), n, L._xi(s1) if L._is_xmm(s1) else n, n,
+                       L._xi(s1) if L._is_xmm(s1) else n)]
+        return ['c->xmm[%d].f64[0] = (double)%s; '
+                'c->xmm[%d].u64[1] = c->xmm[%d].u64[1];'
+                % (n, L._ss(insn, s2), n, L._xi(s1) if L._is_xmm(s1) else n)]
+
+    # movmsk: extrai os bits de sinal para um GPR
+    if vbase in ('movmskpd', 'movmskps'):
+        d, s = ops[0], ops[1]
+        n = L._xi(s)
+        if vbase == 'movmskpd':
+            expr = '((c->xmm[%d].u64[0] >> 63) | ((c->xmm[%d].u64[1] >> 63) << 1))' % (n, n)
+        else:
+            expr = ('((c->xmm[%d].u32[0] >> 31) | ((c->xmm[%d].u32[1] & 0x80000000u) >> 30) | '
+                    '((c->xmm[%d].u32[2] & 0x80000000u) >> 29) | '
+                    '((c->xmm[%d].u32[3] & 0x80000000u) >> 28))') % (n, n, n, n)
+        return [L.dst_write(insn, d, expr)]
+
+    if vbase == 'pmovmskb' and len(ops) == 2:
+        d, s = ops
+        n = L._xi(s)
+        expr = ('((c->xmm[%d].u32[0] >> 7) & 1) | (((c->xmm[%d].u32[0] >> 15) & 1) << 1) | '
+                '(((c->xmm[%d].u32[0] >> 23) & 1) << 2) | (((c->xmm[%d].u32[0] >> 31) & 1) << 3) | '
+                '((c->xmm[%d].u32[1] >> 7) & 1) << 4 | (((c->xmm[%d].u32[1] >> 15) & 1) << 5) | '
+                '(((c->xmm[%d].u32[1] >> 23) & 1) << 6) | (((c->xmm[%d].u32[1] >> 31) & 1) << 7)') \
+               % (n, n, n, n, n, n, n, n, n)
+        return [L.dst_write(insn, d, expr)]
+
     return None
 
 
