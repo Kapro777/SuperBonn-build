@@ -10,12 +10,9 @@ out/
 lift/work/
 lift/out/
 
-# Toolchains baixados em runtime
-tools/remill/
-tools/llvm-*/
-tools/mingit/
-tools/mingit.zip
-tools/pcrecomp/
+# Toolchains baixados em runtime (nunca commitadas): MinGit, gh, pcrecomp,
+# python portatil, credenciais. Nosso codigo fica em scripts/.
+tools/
 
 # Gradle
 .gradle/

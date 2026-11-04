@@ -1,0 +1,80 @@
+name: recon
+
+# Dia 1 do sprint: RE de reconhecimento nos binarios do jogador.
+# Entrada: pacote com os PE (release privada do proprio mantenedor, NUNCA
+# conta Steam no CI). Saida: relatorio + censo de imports + cobertura do lifter.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pe_url:
+        description: 'URL (release privada) do tar com os PE do jogo'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recon-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (pcrecomp)
+        run: bash scripts/lift/build-toolchain.sh tools/
+        shell: bash
+
+      - name: Preparar binarios
+        run: |
+          set -euo pipefail
+          mkdir -p lift/work/pe
+          curl -fL --retry 3 -o pe.tar "${{ inputs.pe_url }}"
+          tar -xf pe.tar -C lift/work/pe
+          ls -la lift/work/pe
+        shell: bash
+
+      - name: pe_analyze + catalog
+        run: |
+          set -euo pipefail
+          mkdir -p lift/work/recon
+          for f in lift/work/pe/*.exe lift/work/pe/*.dll; do
+            [ -e "$f" ] || continue
+            python3 tools/pcrecomp/tools/pe/pe_analyze.py "$f" --json "lift/work/recon/$(basename "$f").json" || true
+          done
+          python3 tools/pcrecomp/tools/pe/catalog.py lift/work/pe --json > lift/work/recon/catalog.json || true
+        shell: bash
+
+      - name: Censo de imports (a lista de shims)
+        run: |
+          set -euo pipefail
+          python3 tools/pcrecomp/tools/pe/extract_imports.py lift/work/pe > lift/work/recon/imports-all.txt || true
+          python3 tools/pcrecomp/tools/pe/delay_imports.py lift/work/pe/*.exe > lift/work/recon/delay-imports.txt || true
+          head -80 lift/work/recon/imports-all.txt
+        shell: bash
+
+      - name: Cobertura do lifter (x87/MMX/AVX)
+        run: |
+          set -euo pipefail
+          python3 scripts/lift/probe-coverage.py lift/work/pe > lift/work/recon/coverage.txt || true
+          cat lift/work/recon/coverage.txt
+        shell: bash
+
+      - name: Il2CppDumper (mapa de simbolos)
+        run: bash scripts/lift/dump-symbols.sh lift/work/pe lift/work/symbols
+        shell: bash
+
+      - name: Fundir nomes
+        run: bash scripts/lift/merge-symbols.sh lift/work/symbols lift/work/names.txt
+        shell: bash
+
+      - name: Upload relatorio (privado, 7 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: recon-${{ github.run_id }}
+          path: lift/work/recon/
+          retention-days: 7
