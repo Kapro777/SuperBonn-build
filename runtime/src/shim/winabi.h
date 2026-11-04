@@ -37,8 +37,10 @@ inline uint64_t arg3(const CPU* c) { return c->r8; }
 inline uint64_t arg4(const CPU* c) { return c->r9; }
 
 // Argumento de stack (0-based, apos o shadow space de 32 bytes do Win64).
+// No momento da chamada: [rsp]=retorno, [rsp+8..rsp+40)=shadow (4 slots),
+// [rsp+48)=primeiro argumento de stack.
 inline uint64_t arg_stack(const CPU* c, int i) {
-    return rd64(c->rsp + 8 * (i + 5));   // retorno + 4 slots de shadow
+    return rd64(c->rsp + 48 + 8 * i);
 }
 
 inline void ret(CPU* c, uint64_t v) { c->rax = v; }
