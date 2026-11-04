@@ -37,6 +37,7 @@ local (Celeron N4020) só edita arquivos.
 | [RanggaCasper/Black-Android](https://github.com/RanggaCasper/Black-Android) | Port de *Black* (Xbox) pra Android, arm64 + Vulkan + SDL3 | **Sim** — SDK XboxXBE-Recomp (x86 do XBE → C++). Nosso template de port |
 | [RanggaCasper/ShaolinMonks-Android](https://github.com/RanggaCasper/ShaolinMonks-Android) | Segundo port da mesma autora, mesmo SDK, Vulkan + touch | **Sim** — prova do padrão: com SDK pronta, port novo é rápido |
 | [sp00nznet/systemes3recomp](https://github.com/sp00nznet/systemes3recomp) | Arcade **Windows x86-64** (UE3) recompilado: 92.552 funções, 0 erros | **Sim — a prova de que x64 de PC levanta** |
+| [ttom795/Skyrim_Android](https://github.com/ttom795/Skyrim_Android) | Skyrim 2011 (PC) recompilado estaticamente para Android | **Sim — o precedente que prova o nosso caminho**: lifter próprio + dxvk-native (D3D9→Vulkan) + SDL2 + build desktop pra iterar sem device |
 | [tinsarfal/GDroid](https://github.com/tinsarfal/GDroid) | Garry's Mod no Android | Não — port nativo do Source (nillerusr). **O que copiamos é o launcher com download via Steam.** |
 
 ## Aviso legal

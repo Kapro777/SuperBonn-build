@@ -78,3 +78,26 @@ jobs:
           name: lift-bc-${{ inputs.shard }}
           path: lift/out/
           retention-days: 7
+
+  # Licao do Skyrim_Android: o MESMO C levantado compila em Linux x86-64 e
+  # debuga com GPU de PC. Iteracao de runtime/shim acontece aqui, sem device.
+  desktop-bringup:
+    needs: toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar C levantado
+        uses: actions/download-artifact@v4
+        with:
+          name: lift-bc-${{ inputs.shard }}
+          path: lift/out/
+      - name: Build desktop (Linux x86-64, Vulkan/SDL3)
+        run: |
+          set -euo pipefail
+          bash scripts/desktop/build.sh lift/out desktop/build/lb
+        shell: bash
+      - name: Smoke test (sem device: -noscreen)
+        run: |
+          set -euo pipefail
+          [ -x desktop/build/lb ] && ./desktop/build/lb --selftest || echo "SKELETON: selftest ainda nao implementado"
+        shell: bash

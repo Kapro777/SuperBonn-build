@@ -83,7 +83,31 @@ engine: reimplementar só os internals que o jogo usa (a lista exata sai da RE:
 `extract_imports` + `Il2CppDumper` + `classify`) e levantar apenas
 `GameAssembly.dll`. Registrado como risco, não como plano.
 
-## 5. RE como multiplicador (o que pediu)
+## 5. Lições do Skyrim_Android (o precedente que muda o jogo)
+
+[`ttom795/Skyrim_Android`](https://github.com/ttom795/Skyrim_Android) é a prova
+de conceito de tudo isso: recompilação estática do **Skyrim 2011 de PC** para
+Android, no ar, funcional. Números reais dele: discovery de horas, lift de ~15
+min, **340 MB de C gerado**, APK em 15-60 min (cada arquivo precisa de 1-2 GB de
+RAM para compilar). O que copiamos:
+
+1. **`HOST_OVERRIDES`** — o lifter renomeia automático para `f_<addr>_guest`
+   toda função que o host substitui. Nossos shims entram sem editar C gerado.
+2. **Build desktop primeiro** (`desktop/build.sh`): o mesmo C levantado compila
+   em **Linux x86-64** e debuga com GPU de PC. **Tira o celular do caminho
+   crítico** — iteração no CI, device só entra na validação final.
+3. **D3D9 via dxvk-native** — para nós: D3D12 via vkd3d-proton arm64 (ou D3D11
+   via DXVK-arm64), os mesmos blocos que GameNative/Winlator usam.
+4. **XAudio2 reimplementado sobre SDL**, SDL2/3 para janela/input/audio.
+5. **Launcher com presets** (detail/resolution/AA/touch) e BYO-copy com
+   validação — mesmo modelo do nosso Fase 1.
+
+**A diferença honesta de esforço**: o alvo dele é **32-bit, ~19 MB**; o nosso é
+**64-bit, ~85 MB**, com VM IL2CPP para inicializar e D3D12 em vez de D3D9. É
+diferença de volume e arquitetura — não de viabilidade. O Edge 30 (SD 778G+,
+Adreno 642L, 8 GB) é melhor que o Adreno 610/3 GB em que o Skyrim roda.
+
+## 6. RE como multiplicador (o que pediu)
 
 1. **Il2CppDumper** → `script.json`/`dump.cs`: nome + endereço de cada método.
    Alimentado no `merge_names.py` do pcrecomp como fonte de nomes: o C levantado
@@ -95,7 +119,7 @@ engine: reimplementar só os internals que o jogo usa (a lista exata sai da RE:
 4. **`difftest64`** → cada shard levantado é testado contra a CPU real antes de
    entrar no build. Correção medida, não esperada.
 
-## 6. Repositório
+## 7. Repositório
 
 ```
 launcher/   App Android (Kotlin): import BYO-copy + login Steam (Fase 1)
@@ -106,7 +130,7 @@ tools/      checkout do pcrecomp (sibling/clone, nunca commitado)
 docs/       architecture, roadmap, legal, operations, sprint
 ```
 
-## 7. CI
+## 8. CI
 
 | Job | Runner | O que faz |
 | --- | --- | --- |
@@ -117,7 +141,7 @@ docs/       architecture, roadmap, legal, operations, sprint
 
 Sem secrets de conta em nenhum job (`docs/OPERATIONS.md`).
 
-## 8. Riscos (atualizado, honesto)
+## 9. Riscos (atualizado, honesto)
 
 | Risco | Severidade | Mitigação |
 | --- | --- | --- |
