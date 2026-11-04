@@ -33,15 +33,23 @@ Adreno 610/3 GB em que o Skyrim roda. vkd3d em Adreno 642L é viável.
 5. `port/log.txt` + switches por arquivo (`singlecore.txt`, `noprof.txt`) para
    diagnóstico no campo.
 
-## Dia 1 — Ferramenta + RE
+## Dia 1 — Ferramenta + RE ✅ FEITO
 
-- Repo no GitHub (privado) — aguardando você criar o repo vazio.
-- `build-toolchain.sh`: clone do pcrecomp + Python 3.11, cache no CI.
-- RE: `pe_analyze` + `catalog`; Il2CppDumper → `script.json`; `extract_imports`
-  na pasta toda → censo.
-- Medir cobertura: procurar x87/MMX/AVX nos bytes do `UnityPlayer.dll`.
-- **Entregável:** relatório de RE + veredito go/no-go (lift total vs plano B).
-- **Corte:** se AVX/x87 dominar a engine, replaneja o Dia 3-5 no mesmo dia.
+- Repo no GitHub (privado) — **criado e pushado**: `github.com/Kapro777/SuperBonn`.
+- `build-toolchain.sh`: clone do pcrecomp + Python portátil, cache no CI.
+- RE: `pe_analyze` + `catalog`; censo próprio `scripts/lift/import-census.py`
+  (PE32+, o do pcrecomp só cobre 32-bit).
+- **Entregável:** `docs/RECON-DAY1.md` + veredito **GO lift total** (~205 mil
+  funções, 0 erros). Bonus: `Megabonk.exe` e `baselib.dll` já levantados
+  inteiros (Dia 2 adiantado) e o **fork do lifter** (AVX/SSE2/ymm/CFE) que
+  derruba os TODO de 172 → 4 no stub.
+
+## Dia 2 — Pipeline ponta a ponta ✅ FEITO (local)
+
+- `disasm64` + `generate64` em `Megabonk.exe` (439 funções, 0 erros, ~1 s),
+  `baselib.dll` (796, 0 erros), `GameAssembly.dll` (148.582, 0 erros, 775 s) e
+  `UnityPlayer.dll` (62.211, 0 erros, 589 s). C gerado: ~1,8 GB no total.
+- Falta: compilar o C (CI/desktop — ver Dia 3) e o `difftest64`.
 
 ## Dia 2 — Pipeline ponta a ponta
 
