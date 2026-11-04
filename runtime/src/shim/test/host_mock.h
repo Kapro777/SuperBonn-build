@@ -29,6 +29,7 @@ inline void wr16(uint64_t a, uint16_t v) { memcpy(sb_map_guest(a), &v, 2); }
 inline void wr8(uint64_t a, uint8_t v) { *reinterpret_cast<uint8_t*>(sb_map_guest(a)) = v; }
 
 // Strings do guest (teste: memoria identidade, UTF-16 literal).
+namespace sb {
 inline size_t guest_wstrlen(const CPU*, uint64_t addr) {
     auto* p = reinterpret_cast<const char16_t*>(sb_map_guest(addr));
     size_t n = 0;
@@ -48,6 +49,7 @@ inline uint64_t guest_alloc_wstr(const CPU*, const std::u16string& s) {
     memcpy(p, s.c_str(), (s.size() + 1) * sizeof(char16_t));
     return reinterpret_cast<uint64_t>(p);
 }
+}  // namespace sb
 
 // Rastreia tamanhos para sb_malloc_usable_size sem depender de _msize.
 #include <vector>

@@ -43,6 +43,40 @@ void sb_shim_FindNextFileW(CPU* c);
 void sb_shim_FindClose(CPU* c);
 void sb_shim_CreateFileMappingW(CPU* c);
 
+// kernel32_misc.cpp
+void sb_shim_QueryPerformanceCounter(CPU* c);
+void sb_shim_QueryPerformanceFrequency(CPU* c);
+void sb_shim_GetTickCount64(CPU* c);
+void sb_shim_GetSystemTimeAsFileTime(CPU* c);
+void sb_shim_MultiByteToWideChar(CPU* c);
+void sb_shim_WideCharToMultiByte(CPU* c);
+void sb_shim_GetCommandLineW(CPU* c);
+void sb_shim_GetCommandLineA(CPU* c);
+void sb_shim_GetModuleHandleW(CPU* c);
+void sb_shim_GetModuleHandleExW(CPU* c);
+void sb_shim_GetModuleFileNameW(CPU* c);
+void sb_shim_LoadLibraryExW(CPU* c);
+void sb_shim_FreeLibrary(CPU* c);
+void sb_shim_GetProcAddress(CPU* c);
+void sb_shim_GetLastError(CPU* c);
+void sb_shim_SetLastError(CPU* c);
+void sb_shim_IsDebuggerPresent(CPU* c);
+void sb_shim_OutputDebugStringW(CPU* c);
+void sb_shim_OutputDebugStringA(CPU* c);
+void sb_shim_WriteConsoleW(CPU* c);
+void sb_shim_GetStdHandle(CPU* c);
+void sb_shim_ExitProcess(CPU* c);
+void sb_shim_TerminateProcess(CPU* c);
+void sb_shim_GetExitCodeProcess(CPU* c);
+void sb_shim_GetSystemInfo(CPU* c);
+void sb_shim_GetVersion(CPU* c);
+void sb_shim_GetVersionExW(CPU* c);
+void sb_shim_GetACP(CPU* c);
+void sb_shim_GetOEMCP(CPU* c);
+void sb_shim_IsValidCodePage(CPU* c);
+void sb_shim_GetCPInfo(CPU* c);
+void sb_shim_CompareStringW(CPU* c);
+
 // kernel32_thread.cpp
 void sb_shim_CreateThread(CPU* c);
 void sb_shim_ExitThread(CPU* c);

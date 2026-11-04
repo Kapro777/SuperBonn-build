@@ -294,44 +294,6 @@ def _scalar_vex(L, insn, m, ops, ea):
                     'wrxm(_a + 16, c->ymm[%d]); }' % (addr, n, n)]
         return ['wrxm(%s, c->xmm[%d]);' % (addr, n)]
 
-    # ---- SAD: psadbw / mpsadbw (memcmp/strcmp vetorizados inlineados) ------
-    # Semantica: SAD de 8 bytes por metade de 64 bits -> u16 em [15:0]/[79:64].
-    if vbase == 'psadbw' and len(ops) == 2:
-        d, s = ops
-        if not L._is_xmm(d):
-            return None
-        n = L._xi(d)
-        return ['{ const uint8_t* _pa = (const uint8_t*)&c->xmm[%d]; '
-                'XMM _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
-                'unsigned _s0 = 0, _s1 = 0; '
-                'for (int _i = 0; _i < 8; ++_i) { '
-                '  int _d0 = _pa[_i] - _pb[_i]; _s0 += (_d0 < 0 ? -_d0 : _d0); '
-                '  int _d1 = _pa[8 + _i] - _pb[8 + _i]; _s1 += (_d1 < 0 ? -_d1 : _d1); } '
-                'c->xmm[%d].u64[0] = _s0; c->xmm[%d].u64[1] = _s1; }'
-                % (n, L._xm(insn, s), n, n)]
-
-    if vbase == 'mpsadbw' and len(ops) == 3:
-        d, s1, s2 = ops
-        if not L._is_xmm(d) or s2.type != X86_OP_IMM:
-            return None
-        imm = s2.imm
-        if (imm >> 3) & 1:
-            return None                     # seletor cruzado: nao modelado
-        off = imm & 3                       # byte inicial dentro da metade
-        n = L._xi(d)
-        # 1a SAD na metade alta se imm[2]; a 2a sempre na outra metade
-        ha1 = 8 if (imm >> 2) & 1 else 0
-        ha2 = 0 if (imm >> 2) & 1 else 8
-        return ['{ const uint8_t* _pa = (const uint8_t*)&c->xmm[%d]; '
-                'XMM _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
-                'unsigned _s0 = 0, _s1 = 0; '
-                'for (int _i = 0; _i < 8; ++_i) { '
-                '  int _a0 = _pa[%d + _i] - _pb[%d + _i]; _s0 += (_a0 < 0 ? -_a0 : _a0); '
-                '  int _a1 = _pa[%d + _i] - _pb[%d + _i]; _s1 += (_a1 < 0 ? -_a1 : _a1); } '
-                'c->xmm[%d].u64[0] = _s0; c->xmm[%d].u64[1] = _s1; }'
-                % (n, L._xm(insn, s1), ha1 + off, ha1 + off, ha2 + off, ha2 + off,
-                   n, n)]
-
     # conversoes escalares VEX: dst = cvt(src2), bits altos de src1
     if len(ops) == 3 and vbase in ('cvtsd2ss', 'cvtss2sd'):
         d, s1, s2 = ops
@@ -520,6 +482,45 @@ def _sse_packed_double(L, insn, m, ops, ea):
     return None
 
 
+def _sad(L, insn, m, ops, ea, vbase):
+    """SAD: psadbw/mpsadbw — SSE (nao-VEX) e VEX. Caminho compartilhado."""
+    if vbase == 'psadbw' and len(ops) == 2:
+        d, s = ops
+        if not L._is_xmm(d):
+            return None
+        n = L._xi(d)
+        return ['{ const uint8_t* _pa = (const uint8_t*)&c->xmm[%d]; '
+                'XMM _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
+                'unsigned _s0 = 0, _s1 = 0; '
+                'for (int _i = 0; _i < 8; ++_i) { '
+                '  int _d0 = _pa[_i] - _pb[_i]; _s0 += (_d0 < 0 ? -_d0 : _d0); '
+                '  int _d1 = _pa[8 + _i] - _pb[8 + _i]; _s1 += (_d1 < 0 ? -_d1 : _d1); } '
+                'c->xmm[%d].u64[0] = _s0; c->xmm[%d].u64[1] = _s1; }'
+                % (n, L._xm(insn, s), n, n)]
+
+    if vbase == 'mpsadbw' and len(ops) == 3:
+        d, s1, s2 = ops
+        if not L._is_xmm(d) or s2.type != X86_OP_IMM:
+            return None
+        imm = s2.imm
+        if (imm >> 3) & 1:
+            return None                     # seletor cruzado: nao modelado
+        off = imm & 3
+        n = L._xi(d)
+        ha1 = 8 if (imm >> 2) & 1 else 0
+        ha2 = 0 if (imm >> 2) & 1 else 8
+        return ['{ const uint8_t* _pa = (const uint8_t*)&c->xmm[%d]; '
+                'XMM _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
+                'unsigned _s0 = 0, _s1 = 0; '
+                'for (int _i = 0; _i < 8; ++_i) { '
+                '  int _a0 = _pa[%d + _i] - _pb[%d + _i]; _s0 += (_a0 < 0 ? -_a0 : _a0); '
+                '  int _a1 = _pa[%d + _i] - _pb[%d + _i]; _s1 += (_a1 < 0 ? -_a1 : _a1); } '
+                'c->xmm[%d].u64[0] = _s0; c->xmm[%d].u64[1] = _s1; }'
+                % (n, L._xm(insn, s1), ha1 + off, ha1 + off,
+                   ha2 + off, ha2 + off, n, n)]
+    return None
+
+
 def lift_avx(L, insn, m, ops, ea):
     # ---- 1. no-ops seguros no host ----------------------------------------
     if m == 'int' and len(ops) == 1 and ops[0].type == X86_OP_IMM \
@@ -551,5 +552,15 @@ def lift_avx(L, insn, m, ops, ea):
             return out
         return None
 
-    # ---- 4. VEX 128-bit ----------------------------------------------------
+    # ---- 3. SAD (comum a SSE e VEX) ----------------------------------------
+    vbase = m[1:] if m.startswith('v') else m
+    sad = _sad(L, insn, m, ops, ea, vbase)
+    if sad is not None:
+        return sad
+
+    # ---- 4. SSE2 packed-double nao-VEX ------------------------------------
+    if not m.startswith('v'):
+        return _sse_packed_double(L, insn, m, ops, ea)
+
+    # ---- 5. VEX 128-bit ----------------------------------------------------
     return _scalar_vex(L, insn, m, ops, ea)
