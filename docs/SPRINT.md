@@ -1,97 +1,90 @@
-# Sprint SuperBonn — 5 dias
+# Sprint SuperBonn — 5 dias (v2)
 
-Base: **pcrecomp** (toolbox de recompilação estática x86-64, MIT) + Il2CppDumper
-para os símbolos. Regra do jogo: cada dia tem entregável verificável e critério
-de corte. O que não estiver no critério do dia **não** é feito.
+Base: **pcrecomp** (toolbox de recompilação x86-64, MIT) + Il2CppDumper.
+Precedente: **Skyrim_Android** (recompilação estática de jogo de PC para
+Android, funcional) — copiamos o método, não o resultado.
 
 ## O que está PROMETIDO no fim dos 5 dias
 
-- App Android (APK instalável) com: launcher BYO-copy validando seus arquivos,
-  host SDL3/Vulkan com controles touch, e o **pipeline de recompilação rodando
-  no GitHub Actions** de ponta a ponta: PE → catálogo → C → objeto arm64 →
-  `difftest64` verde.
-- `Megabonk.exe` (o stub) e `baselib.dll` levantados e linkados no host.
-- Relatório de RE: censo de imports, mapa de símbolos, classificação
-  engine/jogo, medição de cobertura do lifter (x87/MMX/AVX).
-- **Jogo jogável: NÃO está prometido.** Um Unity de 85 MB de x64 é maior que
-  tudo que o pcrecomp já levantou; o que cabe em 5 dias é prova de pipeline +
-  fundação + começo do levantamento. Cada marco tem corte honesto abaixo.
+- APK instalável: launcher BYO-copy validando seus arquivos + host SDL3/Vulkan
+  com controles touch.
+- Pipeline no GitHub Actions ponta a ponta: PE → catálogo → C → arm64.
+- **Build desktop (Linux x86-64) do mesmo C rodando com smoke test** — é aqui
+  que eu itero, seu celular só entra na validação final.
+- `Megabonk.exe` e `baselib.dll` levantados, linkados e rodando no desktop.
+- Relatório de RE: censo de imports, símbolos, cobertura do lifter.
+- **Jogo jogável: não prometido.** Unity de 85 MB x64 é 4x o Skyrim; o Dia 5
+  entrega a fundação + o pipeline pronto, com a lista exata do que falta.
 
-## Dependência crítica: seu celular
+## Device de teste
 
-Eu escrevo código, mas **cada bug precisa rodar no aparelho**. Sem device de
-teste o sprint vira "entrega no escuro". Mínimo: Android 11+, arm64, Vulkan 1.1,
-com `adb` (PC) ou instalando APK + me mandando `logcat`. Ideal: o modelo
-exato — SD 4xx/6xx/7xx/8xx muda tudo em desempenho e em bugs de driver.
+Motorola **Edge 30** — Snapdragon 778G+, Adreno 642L, 8 GB RAM. É melhor que o
+Adreno 610/3 GB em que o Skyrim roda. vkd3d em Adreno 642L é viável.
 
-## Dia 1 — Ferramenta + RE (fundação)
+## Padrões copiados do Skyrim_Android
 
-- Push do repo (privado) — precisa Git na máquina ou MinGit portátil (posso
-  baixar o oficial, peço sua autorização).
-- `scripts/lift/build-toolchain.sh`: clone do pcrecomp + Python 3.11 + deps,
-  com cache no CI.
-- RE: `pe_analyze` + `catalog` na pasta do jogo; **Il2CppDumper** rodado →
-  `script.json`/`dump.cs`; `extract_imports` na pasta inteira → censo.
-- Medir cobertura: `disasm64` numa amostra + procurar x87/MMX/AVX nos bytes.
-- **Entregável:** relatório de RE + veredito go/no-go do plano (lift total vs
-  plano B só-`GameAssembly`).
-- **Corte:** se AVX/x87 dominar `UnityPlayer.dll`, o sprint reescreve o Dia 3-5
-  pelo plano B no mesmo dia (não insiste).
+1. `HOST_OVERRIDES`: função substituída pelo host → renomeada
+   `f_<addr>_guest` automático. Shim entra sem editar C gerado.
+2. Build desktop (`scripts/desktop/build.sh` + job `desktop-bringup`): iteração
+   sem device.
+3. D3D→Vulkan pronto (dxvk-native no caso dele; vkd3d-proton/DXVK-arm64 no
+   nosso), SDL3 para janela/input/audio, XAudio2 reimplementado sobre SDL.
+4. Launcher com presets + BYO-copy validado (a nossa Fase 1).
+5. `port/log.txt` + switches por arquivo (`singlecore.txt`, `noprof.txt`) para
+   diagnóstico no campo.
 
-## Dia 2 — Pipeline ponta a ponta no stub
+## Dia 1 — Ferramenta + RE
 
-- Levantar `Megabonk.exe` (650 KB, C puro) com `generate64.py` → build tree.
-- Compilar com NDK arm64 + `runtime/recomp64_cpu`; `difftest64` com 2.000
-  instruções do próprio binário.
-- Host Android mínimo: SDL3 + Vulkan surface + toque (já existe em
-  `runtime/src/host.cpp`).
-- **Entregável:** APK que instala e abre uma janela; C do stub compilado e
-  linkado; diff testado.
-- **Corte:** se `generate64` não fechar o catálogo do stub, paramos e investigamos
-  antes de tocar nas DLLs.
+- Repo no GitHub (privado) — aguardando você criar o repo vazio.
+- `build-toolchain.sh`: clone do pcrecomp + Python 3.11, cache no CI.
+- RE: `pe_analyze` + `catalog`; Il2CppDumper → `script.json`; `extract_imports`
+  na pasta toda → censo.
+- Medir cobertura: procurar x87/MMX/AVX nos bytes do `UnityPlayer.dll`.
+- **Entregável:** relatório de RE + veredito go/no-go (lift total vs plano B).
+- **Corte:** se AVX/x87 dominar a engine, replaneja o Dia 3-5 no mesmo dia.
 
-## Dia 3 — Shims por censo de imports
+## Dia 2 — Pipeline ponta a ponta
 
-- Implementar os shims do Top-20 do censo (kernel32: arquivos/threads/TLS/tempo;
-  user32: janela/mensagens; ws2_32).
-- Levantar `baselib.dll`; linkar e rodar no host.
-- Começar `GameAssembly.dll`: primeiro shard (funções de init do runtime IL2CPP).
-- **Entregável:** host executa init do runtime IL2CPP até o primeiro import
-  não implementado (medido, não estimado).
-- **Corte:** imports desconhecidos viram stub que aborta alto (padrão pcrecomp),
-  nunca silencioso.
+- Levantar `Megabonk.exe` (650 KB) com `generate64.py` → C.
+- Compilar no **desktop** (Linux x86-64) + `difftest64` (2.000 instruções).
+- Host SDL3/Vulkan mínimo (já existe em `runtime/src/host.cpp`).
+- **Entregável:** C do stub compilado e linkado no desktop, diff testado.
+- **Corte:** se o catálogo do stub não fechar, para e investiga.
+
+## Dia 3 — Shims por censo + baselib
+
+- Top-20 do censo de imports: kernel32 (arquivo/thread/TLS/tempo), user32
+  (janela/mensagem), ws2_32.
+- Levantar `baselib.dll`; linkar; rodar no desktop até o 1º import faltante.
+- Primeiro shard do `GameAssembly.dll` (init do runtime IL2CPP).
+- **Entregável:** init do runtime IL2CPP rodando até o limite real dos shims.
 
 ## Dia 4 — Gráficos e áudio
 
-- Decidir D3D12→Vulkan (vkd3d-proton arm64) vs D3D11→Vulkan (DXVK-arm64) pelos
-  imports reais medidos no Dia 1.
+- Decidir backend pelos imports medidos: vkd3d-proton arm64 (D3D12) vs
+  DXVK-arm64 (D3D11).
 - Áudio: XAudio2/baselib → SDL3. Input: Rewired → ponte touch/gamepad.
-- Continuar shards do `GameAssembly.dll`; `UnityPlayer.dll` só se o Dia 1 tiver
-  sido go para lift total.
-- **Entregável:** primeira superfície Vulkan renderizando algo do guest, OU o
-  relatório exato do que falta.
+- Shards do `GameAssembly.dll`; `UnityPlayer.dll` só se o Dia 1 foi go.
+- **Entregável:** primeira superfície Vulkan renderizando algo do guest.
 
-## Dia 5 — Integração e configuração
+## Dia 5 — Integração
 
-- Launcher BYO-copy funcional na tela do celular: valida checksums dos seus
-  arquivos (sem baixar nada, sem credencial).
-- layout de toque inicial; `logcat` limpo de crashes óbvios.
-- Publicar (privado) os artefatos do sprint e escrever o estado real em
-  `docs/ROADMAP.md`.
-- **Entregável:** APK dia-5 nas suas mãos + pipeline CI verde + lista do que
-  falta para o Dia 6+.
+- Launcher BYO-copy na tela do celular: valida checksums, sem credencial.
+- Smoke test no Edge 30; `logcat` limpo; layout de toque inicial.
+- Artefatos privados + atualização honesta do ROADMAP.
+- **Entregável:** APK dia-5 + pipeline CI verde + lista do Dia 6+.
 
 ## Kill switches
 
-1. Dia 1 com veredito de plano B e replanejamento imediato do Dia 3-5.
-2. CI estourando RAM/tempo além do plano gratuito → self-hosted ou redução de
-  shard; não queimar dinheiro.
-3. Pedido de remoção da Ved/Unity/Valve → tudo para (48h, `docs/LEGAL.md`).
+1. Dia 1 com veredito plano B → replaneja 3-5 imediato.
+2. CI estourando RAM/tempo → reduz shard ou self-hosted. Não queimar dinheiro.
+3. Pedido de remoção da Ved/Unity/Valve → 48h, `docs/LEGAL.md`.
 
-## Trilha B (só se você pedir)
+## Realismo (para não ter ilusão)
 
-Se em paralelo quiser **algo jogável esta semana** (antes da recomp maturar), a
-rota é a camada de tradução dinâmica que já existe (Box64/FEX + Wine + VKD3D,
-como GameNative/Winlator/Bannerlator). **Não é recompilação estática** — é
-translação em tempo de execução. Eu só toco essa trilha se você mandar, e ela
-fica separada da engine SuperBonn.
+O Skyrim tem 12 commits e 1 desenvolvedor, mas o trabalho por trás foi semanas.
+O que faz parecer rápido: toolchain própria enxuta + jogo 32-bit/documentado +
+substituição de subsistemas por host. Para o Megabonk o mesmo método encurta
+muito, mas 85 MB x64 + VM IL2CPP + D3D12 continuam sendo mais trabalho — por
+isso o Dia 5 não promete jogo jogável, promete a fundação que torna o Dia 6+
+uma linha de produção.
