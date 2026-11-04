@@ -59,7 +59,22 @@ Adreno 610/3 GB em que o Skyrim roda. vkd3d em Adreno 642L é viável.
 - **Entregável:** C do stub compilado e linkado no desktop, diff testado.
 - **Corte:** se o catálogo do stub não fechar, para e investiga.
 
-## Dia 3 — Shims por censo + baselib
+## Dia 3 — Shims por censo + baselib 🟡 EM ANDAMENTO
+
+Feito (42 testes passando no host mingw — `scripts/rt/test-shims.ps1`):
+
+| Arquivo | Cobre | Testes |
+| --- | --- | --- |
+| `runtime/src/shim/winabi.h` | ABI dos shims (CPU*, args rcx/rdx/r8/r9 + stack, tabela) | — |
+| `runtime/src/shim/handles.h` | HANDLE do guest -> objeto do host | — |
+| `runtime/src/shim/kernel32_memory.cpp` | VirtualAlloc/Free/Query, Heap*, TLS/FLS, Encode/DecodePointer | 10 |
+| `runtime/src/shim/kernel32_file.cpp` | CreateFileA/W, Read/Write, SetFilePointer, GetFileSize, Find*, diretórios, mmap | 12 |
+| `runtime/src/shim/kernel32_thread.cpp` | CreateThread (pthread + CPU por thread), CriticalSection recursivo, SRW, Event/Mutex/Semaforo, Wait, Sleep | 11 |
+| `runtime/src/shim/kernel32_misc.cpp` | QPC/GetTickCount64, UTF-8↔UTF-16, GetCommandLine, módulos, Get/SetLastError, console, ExitProcess, GetSystemInfo, GetVersion | 9 |
+
+Falta: user32 (janela), ws2_32 (rede — Steamworks.NET), advapi32 (registro),
+winmm/hid/dinput8 (input → ponte SDL3), DXCore/D3DKMT (89 APIs de adapter —
+decisão do Dia 4). Regra de ouro: shim faltante **aborta alto**, nunca silencia.
 
 - Top-20 do censo de imports: kernel32 (arquivo/thread/TLS/tempo), user32
   (janela/mensagem), ws2_32.
