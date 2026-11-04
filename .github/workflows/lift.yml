@@ -1,0 +1,80 @@
+name: lift
+
+# Pipeline de recompilacao estatica: PE x64 do jogo -> LLVM bitcode -> objetos
+# arm64. WARNING: experimental — depende de remill/mcsema buildaveis no runner.
+#
+# REGRAS (docs/LEGAL.md, docs/OPERATIONS.md):
+# - NAO usa secrets de conta Steam. Os binarios entram por input manual
+#   (URL de release privada do proprio mantenedor) ou por runner self-hosted.
+# - Artefatos tem retencao curta e NAO sao publicados.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pe_url:
+        description: 'URL (release privada) do pacote com os PE do jogo. Vazio = usar ./pe local'
+        required: false
+        default: ''
+      shard:
+        description: 'Shard a levantar (ex.: 0/16)'
+        required: false
+        default: '0/1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lift-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  toolchain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restaurar cache de toolchain
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: tools/
+          key: lift-toolchain-${{ runner.os }}-v1
+
+      - name: Preparar toolchain (pcrecomp)
+        run: |
+          set -euo pipefail
+          scripts/lift/build-toolchain.sh tools/
+        shell: bash
+
+      - name: Preparar binarios do jogo
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.pe_url }}" ]; then
+            mkdir -p lift/work/pe
+            curl -fL --retry 3 -o pe.tar "${{ inputs.pe_url }}"
+            tar -xf pe.tar -C lift/work/pe
+          else
+            mkdir -p lift/work/pe            # rode o lifter localmente esuba os PE aqui
+          fi
+          ls -la lift/work/pe || true
+        shell: bash
+
+      - name: Il2CppDumper (mapa de simbolos)
+        run: bash scripts/lift/dump-symbols.sh lift/work/pe lift/work/symbols
+        shell: bash
+
+      - name: Fundir nomes (merge_names)
+        run: bash scripts/lift/merge-symbols.sh lift/work/symbols lift/work/names.txt
+        shell: bash
+
+      - name: Lift (shardado por funcao)
+        run: bash scripts/lift/lift-shard.sh lift/work/pe lift/work/symbols "${{ inputs.shard }}" lift/out
+        shell: bash
+
+      - name: Upload bitcode (privado, retencao curta)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lift-bc-${{ inputs.shard }}
+          path: lift/out/
+          retention-days: 7

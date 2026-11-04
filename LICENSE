@@ -1,0 +1,33 @@
+MIT License
+
+Copyright (c) 2026 SuperBonn contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+AVISO: esta licença cobre apenas o código-fonte original do projeto SuperBonn
+(o launcher, o runtime e as ferramentas de recompilação escritas por nós).
+
+Ela NÃO cobre:
+- os binários do jogo Megabonk nem qualquer dado do jogo (são da Ved/Unity);
+- o código C/C++ gerado pelo lifter a partir dos binários do jogo, que é obra
+  derivada dos binários originais e não deve ser publicado.
+
+Ver docs/LEGAL.md para a postura legal e de segurança completa.

@@ -1,0 +1,30 @@
+# Dados do jogo NUNCA vão pro repo (BYO-copy)
+Megabonk/
+
+# Artefatos de build
+build/
+out/
+*.apk
+*.bc
+*.ll
+lift/work/
+lift/out/
+
+# Toolchains baixados em runtime
+tools/remill/
+tools/llvm-*/
+tools/mingit/
+tools/mingit.zip
+tools/pcrecomp/
+
+# Gradle
+.gradle/
+local.properties
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store

@@ -1,0 +1,50 @@
+name: guard
+
+# Falha o CI se qualquer arquivo do jogo / binário proibido / arquivo grande
+# entrar no repositório. Regra de docs/OPERATIONS.md §1 e docs/LEGAL.md §1.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-game-files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verificar nomes proibidos
+        run: |
+          set -euo pipefail
+          bad=0
+          names='Megabonk.exe|UnityCrashHandler64.exe|GameAssembly.dll|UnityPlayer.dll|baselib.dll|D3D12Core.dll|globalgamemanagers|level0|level1|level2|sharedassets0.assets|sharedassets1.assets|sharedassets2.assets|resources.assets|il2cpp_data'
+          if git ls-files | grep -Eq "($names)$"; then
+            echo "::error::Arquivo proibido versionado (dados do jogo). Remova do histórico."
+            git ls-files | grep -E "($names)$" || true
+            bad=1
+          fi
+          exts='\.(vpk|unity3d|asset|resS|resources|bundle)$'
+          if git ls-files | grep -Eq "$exts"; then
+            echo "::error::Extensao de dados de jogo versionada."
+            git ls-files | grep -E "$exts" || true
+            bad=1
+          fi
+          # a pasta do jogo em si
+          if git ls-files | grep -q '^Megabonk/'; then
+            echo "::error::Pasta Megabonk/ versionada."
+            bad=1
+          fi
+          # arquivos > 10 MB (dados do jogo costumam ser grandes)
+          big=$(git ls-files -z | xargs -0 -I{} sh -c 'test -f "{}" && stat -c "%s %n" "{}"' | awk '$1 > 10485760 {print}')
+          if [ -n "$big" ]; then
+            echo "::error::Arquivo maior que 10MB versionado:"
+            echo "$big"
+            bad=1
+          fi
+          if [ "$bad" -ne 0 ]; then exit 1; fi
+          echo "OK: repo limpo."

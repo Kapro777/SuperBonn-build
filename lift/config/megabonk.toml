@@ -1,0 +1,39 @@
+# Config do pipeline de lift do SuperBonn — SKELETON (docs/ROADMAP.md Fase 2).
+# Espelha o formato de config/game.toml usado pelo Black-Android.
+
+[game]
+name = "Megabonk"
+company = "Ved"
+engine = "Unity 2022.3 LTS (IL2CPP)"
+appid = 0 # preencher com o appid real da Steam quando o launcher existir
+
+# Ordem de levantamento: do menor/mais simples para o complexo.
+# Regra da Fase 2: provar o pipeline em Megabonk.exe antes de tocar no resto.
+[modules]
+order = ["Megabonk.exe", "baselib.dll", "GameAssembly.dll", "UnityPlayer.dll"]
+skip  = ["D3D12Core.dll", "Rewired_Windows.dll"] # substituídos pelo runtime
+
+[modules.entry]
+# Megabonk.exe só encaminha para UnityMain dentro do UnityPlayer.dll.
+# Hook: reescrever a chamada para superbonn_host_main (runtime/src/host.cpp).
+from = "Megabonk.exe:UnityMain"
+to   = "superbonn_host_main"
+
+[shards]
+# IL2CPP do Megabonk tem dezenas de milhares de funções: sharding por ranges
+# de endereço vindos do mapa do Il2CppDumper.
+total = 16
+
+[exceptions]
+# Exceções C++ do guest: resolvidas pelo runtime recomp64_cpu (eh64.c), que
+# anda a pilha do guest pelo .pdata/.xdata original e roda os catch funclets.
+# Nada a fazer no config — só manter eh64.c no link do Android.
+mode = "recomp64_cpu-eh64"
+
+# Lacunas conhecidas do lifter a medir no Dia 1 do sprint (SPRINT.md):
+# x87 e MMX viram RECOMP_TODO. Se UnityPlayer.dll pesar nisso, ir para o
+# plano B: levantar só GameAssembly.dll e reimplementar os internals usados.
+
+[outputs]
+bitcode_dir = "lift/out/bc"
+objects_dir = "lift/out/obj"
