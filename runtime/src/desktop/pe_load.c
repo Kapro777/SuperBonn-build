@@ -108,6 +108,72 @@ static void apply_relocs(uint8_t* base, uint64_t delta, uint32_t rva, uint32_t s
     }
 }
 
+// ---- exports -----------------------------------------------------------------
+// Preenche `out` (name -> endereco no guest) com os exports do PE.
+// Os nomes apontam para a imagem mapeada (estavel após o load).
+typedef struct { const char* name; uint64_t va; } sb_export_t;
+
+#define IMAGE_DIRECTORY_ENTRY_EXPORT 0
+
+int sb_pe_exports(const char* path, sb_export_t* out, int cap) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END);
+    long fsz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t* buf = (uint8_t*)malloc(fsz);
+    if (!buf || fread(buf, 1, fsz, f) != (size_t)fsz) { fclose(f); return 0; }
+    fclose(f);
+
+    nt_hdr_t* nt = (nt_hdr_t*)(buf + ((dos_hdr_t*)buf)->e_lfanew);
+    uint32_t rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (!rva) { free(buf); return 0; }
+
+    uint64_t preferred = nt->OptionalHeader.ImageBase;
+    // acha a secao que contem o export dir
+    sec_hdr_t* secs = (sec_hdr_t*)((uint8_t*)&nt->OptionalHeader
+                                   + nt->FileHeader.SizeOfOptionalHeader);
+    uint8_t* eat = NULL;
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        if (rva >= secs[i].VirtualAddress
+            && rva < secs[i].VirtualAddress + secs[i].VirtualSize) {
+            eat = buf + secs[i].PointerToRawData + (rva - secs[i].VirtualAddress);
+            break;
+        }
+    }
+    if (!eat) { free(buf); return 0; }
+
+    uint32_t nNames = *(uint32_t*)(eat + 24);
+    uint32_t funcsRVA = *(uint32_t*)(eat + 28);
+    uint32_t namesRVA = *(uint32_t*)(eat + 32);
+    uint32_t ordsRVA = *(uint32_t*)(eat + 36);
+
+    // converte RVA -> offset no arquivo (mesma logica de secao)
+    #define RVA2OFF(_rva) ({ uint32_t _r = (_rva); uint8_t* _p = NULL; \
+        for (int _i = 0; _i < nt->FileHeader.NumberOfSections; ++_i) { \
+            if (_r >= secs[_i].VirtualAddress && \
+                _r < secs[_i].VirtualAddress + secs[_i].VirtualSize) { \
+                _p = buf + secs[_i].PointerToRawData + (_r - secs[_i].VirtualAddress); \
+                break; } } _p; })
+
+    uint32_t* funcs = (uint32_t*)RVA2OFF(funcsRVA);
+    uint32_t* names = (uint32_t*)RVA2OFF(namesRVA);
+    uint16_t* ords = (uint16_t*)RVA2OFF(ordsRVA);
+    if (!funcs || !names || !ords) { free(buf); return 0; }
+
+    int n = 0;
+    for (uint32_t i = 0; i < nNames && n < cap; ++i) {
+        char* nm = (char*)RVA2OFF(names[i]);
+        if (!nm) continue;
+        out[n].name = nm;                          // estavel (imagem mapeada)
+        out[n].va = preferred + funcs[ords[i]];    // endereco no guest
+        ++n;
+    }
+    #undef RVA2OFF
+    free(buf);
+    return n;
+}
+
 // Carrega o PE e devolve o endereco do entry point (0 = falha).
 uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
     FILE* f = fopen(path, "rb");

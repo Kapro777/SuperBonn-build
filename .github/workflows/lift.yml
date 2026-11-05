@@ -86,22 +86,36 @@ jobs:
       - name: Metricas (so contagens — sem endereco)
         run: |
           set -euo pipefail
-          LOG=lift/work/gen.log
           grep -E "functions|lift_errors|recomp_todo_sites" lift/work/gen.log || true
           echo "arquivos gerados: $(ls lift/work/gen | wc -l)"
           echo "bytes gerados: $(du -sb lift/work/gen | cut -f1)"
         shell: bash
 
-      - name: Publicar saida no repo PRIVADO (nunca como artefato publico)
+      # O C gerado compila rapido no runner e levaria um dia no Celeron:
+      # objetos do host (Linux x86-64) saem daqui e vao pro repo privado.
+      - name: Compilar objetos do host (paralelo)
+        run: |
+          set -euo pipefail
+          mkdir -p lift/obj
+          cp tools/pcrecomp/runtime/recomp64_cpu/cpu64.h lift/work/gen/
+          ls lift/work/gen/*.c | xargs -P "$(nproc)" -I{} \
+            bash -c 'g++ -c "$1" -o "lift/obj/$(basename "$1" .c).o" -O1 -w -std=c++20 \
+                     -fpermissive -I lift/work/gen -I tools/pcrecomp/runtime/recomp64_cpu' _ {}
+          echo "objetos: $(ls lift/obj | wc -l)"
+        shell: bash
+
+      - name: Publicar saida + objetos no repo PRIVADO
         run: |
           set -euo pipefail
           TAG="lift-${{ inputs.module }}-${{ github.run_id }}"
-          tar -czf "lift-out.tar.gz" -C lift/work gen
-          gh release create "$TAG" "lift-out.tar.gz" \
+          tar -czf lift-out.tar.gz -C lift/work gen -C ../.. lift/obj 2>/dev/null || \
+            (mkdir -p pkg/gen pkg/obj && cp -r lift/work/gen/* pkg/gen/ && cp lift/obj/* pkg/obj/ \
+             && tar -czf lift-out.tar.gz -C pkg gen obj)
+          gh release create "$TAG" lift-out.tar.gz \
             --repo Kapro777/SuperBonn-assets \
-            --title "Lift ${{ inputs.module }} (run ${{ github.run_id }})" \
-            --notes "Saida do generate64 com o fork SuperBonn. Derivada dos binarios: fica privada." | tail -1
-          rm -rf lift/work/gen lift-out.tar.gz
+            --title "Lift+objs ${{ inputs.module }} (run ${{ github.run_id }})" \
+            --notes "C levantado (fork SuperBonn) + objetos do host. Derivado dos binarios: fica privado." | tail -1
+          rm -rf lift/work/gen lift/obj lift-out.tar.gz
           echo "saida publicada em $TAG e copia local removida"
         shell: bash
 

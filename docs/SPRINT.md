@@ -8,9 +8,9 @@
 
 | Item | Estado | Medição |
 | --- | --- | --- |
-| Repo privado + push | ✅ | github.com/Kapro777/SuperBonn, 9+ commits |
+| Repo privado + push | ✅ | github.com/Kapro777/SuperBonn (código) + SuperBonn-build (público temporário, CI ilimitado) + SuperBonn-assets (privado, binários e saídas) |
 | RE: censo de imports, PE analyze | ✅ | `docs/RECON-DAY1.md` |
-| Lift dos 4 módulos (disasm64+generate64) | ✅ | 439 + 796 + **148.582** + 62.211 funções, **0 erros**, ~1,8 GB de C, tudo no Celeron em minutos |
+| Lift dos 4 módulos (disasm64+generate64) | ✅ | local: 439 + 796 + **148.582** + 62.211 funções, **0 erros**, ~1,8 GB de C; **CI provado**: GitHub rodou o exe com os mesmos números (439 funções, 6 TODOs) e publicou a saída no repo privado |
 | Fork do lifter (AVX/ymm/FMA/SSE2/MMX/SAD/CFE) | ✅ | TODOs: exe **172→6**, GameAssembly **3.106→560**, UnityPlayer **22.331→7.160** (-70% no total) |
 | Shims Win32 + testes no host | 🟡 | memória/arquivo/thread/misc: **42 testes passando** (`scripts/rt/test-shims.ps1`) |
 | Build desktop p/ iterar sem device | ✅ **FUNCIONANDO** | `scripts/rt/build-desktop.ps1`: loader de PE + dispatch/HLE + 126 shims; **o CRT do guest (Megabonk.exe levantado) inicializa de verdade** — probes do VS2022 (InitializeCriticalSectionEx, FlsAlloc/SetValue, GetProcAddress dinamico), TLS, critical sections, tempo |

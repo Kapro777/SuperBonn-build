@@ -72,9 +72,9 @@ def main() -> int:
     #    novo entra zerado como xmm.
     cpu_h = pcre / "runtime" / "recomp64_cpu" / "cpu64.h"
     htext = cpu_h.read_text(encoding="utf-8")
-    if "XMM ymm[16];" in htext:
+    if "ymm[16]" in htext:
         print("cpu64.h ja tem ymm[16]")
-    elif "XMM      xmm[16];" in htext:
+    elif "xmm[16];" in htext:
         htext = htext.replace(
             "XMM      xmm[16];",
             "XMM      xmm[16];\n    XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */",
@@ -86,10 +86,10 @@ def main() -> int:
               "storage — as instrucoes 256-bit vao continuar em TODO")
 
     htext = cpu_h.read_text(encoding="utf-8")
-    if "uint64_t mm[8];" in htext:
+    if "mm[8]" in htext:
         print("cpu64.h ja tem mm[8]")
         return 0
-    if "XMM      ymm[16];" in htext:
+    if "ymm[16]" in htext:
         htext = htext.replace(
             "XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */",
             "XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */\n"
