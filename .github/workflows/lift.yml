@@ -1,24 +1,24 @@
 name: lift
 
-# Pipeline de recompilacao estatica: PE x64 do jogo -> LLVM bitcode -> objetos
-# arm64. WARNING: experimental — depende de remill/mcsema buildaveis no runner.
-#
-# REGRAS (docs/LEGAL.md, docs/OPERATIONS.md):
-# - NAO usa secrets de conta Steam. Os binarios entram por input manual
-#   (URL de release privada do proprio mantenedor) ou por runner self-hosted.
-# - Artefatos tem retencao curta e NAO sao publicados.
+# Pipeline de recompilacao: PE x64 -> LLVM... (pcrecomp) -> C -> objetos.
+# Roda no repo PUBLICO temporario (minutos ilimitados). REGRAS DE SEGURANCA:
+#   - binarios do jogo entram por token (release privada do SuperBonn-assets)
+#   - a saida (C levantado) volta pro repo PRIVADO como release
+#   - NENHUM artefato publico: logs de repo publico sao publicos, por isso
+#     nada de ecoar enderecos/conteudo derivado (so contagens)
+#   - a copia local da saida eh apagada no final (defesa em profundidade)
 
 on:
   workflow_dispatch:
     inputs:
+      module:
+        description: 'Modulo a levantar (Megabonk.exe, GameAssembly.dll, UnityPlayer.dll, baselib.dll)'
+        required: false
+        default: 'Megabonk.exe'
       pe_url:
-        description: 'URL (release privada) do pacote com os PE do jogo'
+        description: 'URL da release privada (vazio = pe-v1 do SuperBonn-assets)'
         required: false
-        default: 'https://github.com/Kapro777/SuperBonn-assets/releases/download/pe-v1/megabonk-pe.tar.gz'
-      shard:
-        description: 'Shard a levantar (ex.: 0/16)'
-        required: false
-        default: '0/1'
+        default: ''
 
 permissions:
   contents: read
@@ -31,6 +31,8 @@ jobs:
   toolchain:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ secrets.ASSETS_PAT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,62 +44,73 @@ jobs:
           key: lift-toolchain-${{ runner.os }}-v1
 
       - name: Preparar toolchain (pcrecomp)
-        run: |
-          set -euo pipefail
-          scripts/lift/build-toolchain.sh tools/
+        run: bash scripts/lift/build-toolchain.sh tools/
         shell: bash
 
-      - name: Preparar binarios do jogo
+      - name: Baixar binarios (release privada, via token)
         run: |
           set -euo pipefail
           if [ -n "${{ inputs.pe_url }}" ]; then
-            mkdir -p lift/work/pe
-            curl -fL --retry 3 -o pe.tar "${{ inputs.pe_url }}"
-            tar -xf pe.tar -C lift/work/pe
+            curl -fL --retry 3 -H "Authorization: token $GH_TOKEN" \
+                 -o pe.tar "${{ inputs.pe_url }}"
           else
-            mkdir -p lift/work/pe            # rode o lifter localmente esuba os PE aqui
+            gh release download pe-v1 --repo Kapro777/SuperBonn-assets \
+                --pattern megabonk-pe.tar.gz --output pe.tar --clobber
           fi
-          ls -la lift/work/pe || true
+          mkdir -p lift/work/pe
+          tar -xf pe.tar -C lift/work/pe
+          ls lift/work/pe
         shell: bash
 
-      - name: Il2CppDumper (mapa de simbolos)
-        run: bash scripts/lift/dump-symbols.sh lift/work/pe lift/work/symbols
+      - name: Aplicar fork SuperBonn ao lifter
+        run: python3 scripts/lift/apply-fork.py tools/pcrecomp
         shell: bash
 
-      - name: Fundir nomes (merge_names)
-        run: bash scripts/lift/merge-symbols.sh lift/work/symbols lift/work/names.txt
+      - name: Catalogo de funcoes (disasm64)
+        run: |
+          set -euo pipefail
+          mkdir -p lift/work/disasm
+          python3 tools/pcrecomp/tools/disasm/disasm64.py \
+            "lift/work/pe/${{ inputs.module }}" \
+            --funcs-txt "lift/work/disasm/funcs.txt" | tail -3
         shell: bash
 
-      - name: Lift (shardado por funcao)
-        run: bash scripts/lift/lift-shard.sh lift/work/pe lift/work/symbols "${{ inputs.shard }}" lift/out
+      - name: Levantar (generate64)
+        run: |
+          set -euo pipefail
+          python3 tools/pcrecomp/tools/lift/generate64.py \
+            "lift/work/pe/${{ inputs.module }}" \
+            lift/work/disasm/funcs.txt lift/work/gen --split 400 | tail -12
         shell: bash
 
-      - name: Upload bitcode (privado, retencao curta)
-        uses: actions/upload-artifact@v4
-        with:
-          name: lift-bc-${{ inputs.shard }}
-          path: lift/out/
-          retention-days: 7
+      - name: Metricas (so contagens — sem endereco)
+        run: |
+          set -euo pipefail
+          LOG=lift/work/gen.log
+          grep -E "functions|lift_errors|recomp_todo_sites" lift/work/gen.log || true
+          echo "arquivos gerados: $(ls lift/work/gen | wc -l)"
+          echo "bytes gerados: $(du -sb lift/work/gen | cut -f1)"
+        shell: bash
 
-  # Licao do Skyrim_Android: o MESMO C levantado compila em Linux x86-64 e
-  # debuga com GPU de PC. Iteracao de runtime/shim acontece aqui, sem device.
+      - name: Publicar saida no repo PRIVADO (nunca como artefato publico)
+        run: |
+          set -euo pipefail
+          TAG="lift-${{ inputs.module }}-${{ github.run_id }}"
+          tar -czf "lift-out.tar.gz" -C lift/work gen
+          gh release create "$TAG" "lift-out.tar.gz" \
+            --repo Kapro777/SuperBonn-assets \
+            --title "Lift ${{ inputs.module }} (run ${{ github.run_id }})" \
+            --notes "Saida do generate64 com o fork SuperBonn. Derivada dos binarios: fica privada." | tail -1
+          rm -rf lift/work/gen lift-out.tar.gz
+          echo "saida publicada em $TAG e copia local removida"
+        shell: bash
+
+  # Licao do Skyrim_Android: o MESMO C compila em Linux x86-64 e debuga com
+  # GPU de PC. Iteracao de runtime/shim acontece aqui, sem device.
   desktop-bringup:
     needs: toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Baixar C levantado
-        uses: actions/download-artifact@v4
-        with:
-          name: lift-bc-${{ inputs.shard }}
-          path: lift/out/
-      - name: Build desktop (Linux x86-64, Vulkan/SDL3)
-        run: |
-          set -euo pipefail
-          bash scripts/desktop/build.sh lift/out desktop/build/lb
-        shell: bash
-      - name: Smoke test (sem device: -noscreen)
-        run: |
-          set -euo pipefail
-          [ -x desktop/build/lb ] && ./desktop/build/lb --selftest || echo "SKELETON: selftest ainda nao implementado"
-        shell: bash
+      - name: Placeholder do build desktop
+        run: echo "SKELETON: depends do lift-out (repo privado) + runtime/ — Fase 3"

@@ -1,28 +1,27 @@
 name: recon
 
 # Dia 1 do sprint: RE de reconhecimento nos binarios do jogador.
-# Entrada: pacote com os PE (release privada do proprio mantenedor, NUNCA
-# conta Steam no CI). Saida: relatorio + censo de imports + cobertura do lifter.
+# REPO PUBLICO temporario: binarios entram por token (release privada) e o
+# relatorio de saida volta pro repo PRIVADO. Nada de artefato publico — logs
+# de repo publico sao publicos e podem conter enderecos.
 
 on:
   workflow_dispatch:
     inputs:
       pe_url:
-        description: 'URL (release privada) do tar com os PE do jogo'
+        description: 'URL da release privada (vazio = pe-v1 do SuperBonn-assets)'
         required: false
-        default: 'https://github.com/Kapro777/SuperBonn-assets/releases/download/pe-v1/megabonk-pe.tar.gz'
+        default: ''
 
 permissions:
   contents: read
-
-concurrency:
-  group: recon-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   recon:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.ASSETS_PAT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,13 +29,18 @@ jobs:
         run: bash scripts/lift/build-toolchain.sh tools/
         shell: bash
 
-      - name: Preparar binarios
+      - name: Baixar binarios (release privada, via token)
         run: |
           set -euo pipefail
+          if [ -n "${{ inputs.pe_url }}" ]; then
+            curl -fL --retry 3 -H "Authorization: token $GH_TOKEN" -o pe.tar "${{ inputs.pe_url }}"
+          else
+            gh release download pe-v1 --repo Kapro777/SuperBonn-assets \
+                --pattern megabonk-pe.tar.gz --output pe.tar --clobber
+          fi
           mkdir -p lift/work/pe
-          curl -fL --retry 3 -o pe.tar "${{ inputs.pe_url }}"
           tar -xf pe.tar -C lift/work/pe
-          ls -la lift/work/pe
+          ls lift/work/pe
         shell: bash
 
       - name: pe_analyze + catalog
@@ -53,29 +57,18 @@ jobs:
       - name: Censo de imports (a lista de shims)
         run: |
           set -euo pipefail
-          python3 tools/pcrecomp/tools/pe/extract_imports.py lift/work/pe > lift/work/recon/imports-all.txt || true
-          python3 tools/pcrecomp/tools/pe/delay_imports.py lift/work/pe/*.exe > lift/work/recon/delay-imports.txt || true
-          head -80 lift/work/recon/imports-all.txt
+          python3 scripts/lift/import-census.py lift/work/pe lift/work/recon/imports-all.txt
+          head -40 lift/work/recon/imports-all.txt
         shell: bash
 
-      - name: Cobertura do lifter (x87/MMX/AVX)
+      - name: Publicar relatorio no repo PRIVADO
         run: |
           set -euo pipefail
-          python3 scripts/lift/probe-coverage.py lift/work/pe > lift/work/recon/coverage.txt || true
-          cat lift/work/recon/coverage.txt
+          TAG="recon-${{ github.run_id }}"
+          tar -czf recon.tar.gz -C lift/work recon
+          gh release create "$TAG" recon.tar.gz \
+            --repo Kapro777/SuperBonn-assets \
+            --title "Recon (run ${{ github.run_id }})" \
+            --notes "Relatorio de RE do pipeline. Derivado dos binarios: fica privado." | tail -1
+          rm -rf lift/work/recon recon.tar.gz
         shell: bash
-
-      - name: Il2CppDumper (mapa de simbolos)
-        run: bash scripts/lift/dump-symbols.sh lift/work/pe lift/work/symbols
-        shell: bash
-
-      - name: Fundir nomes
-        run: bash scripts/lift/merge-symbols.sh lift/work/symbols lift/work/names.txt
-        shell: bash
-
-      - name: Upload relatorio (privado, 7 dias)
-        uses: actions/upload-artifact@v4
-        with:
-          name: recon-${{ github.run_id }}
-          path: lift/work/recon/
-          retention-days: 7
