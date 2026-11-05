@@ -40,6 +40,8 @@ jobs:
         run: python3 scripts/lift/apply-fork.py tools/pcrecomp
 
       # ---- levanta e compila cada modulo -------------------------------------
+      # Arquivos menores (--split 200) e fallback para -O0 quando o -O1
+      # estoura a memoria do cc1plus em algum arquivo gigante.
       - name: Levantar + compilar modulos
         run: |
           set -euo pipefail
@@ -53,14 +55,16 @@ jobs:
             mkdir -p "lift/gen/$MOD"
             python3 tools/pcrecomp/tools/lift/generate64.py \
               "lift/work/pe/$MOD" "lift/work/disasm_$MOD.txt" \
-              "lift/gen/$MOD" --split 400 | grep -E "COMPLETE|functions|lift_errors|recomp_todo"
+              "lift/gen/$MOD" --split 200 | grep -E "COMPLETE|functions|lift_errors|recomp_todo"
             if [ -n "$PFX" ]; then
               python3 scripts/lift/namespace-gen.py "lift/gen/$MOD" "$PFX" >/dev/null
             fi
             cp tools/pcrecomp/runtime/recomp64_cpu/cpu64.h "lift/gen/$MOD/"
             ls "lift/gen/$MOD"/*.c | xargs -P "$(nproc)" -I{} \
-              bash -c 'g++ -c "$1" -o "lift/obj/$(basename "$1" .c)_'"$PFX"'.o" -O1 -w -std=c++20 \
-                       -fpermissive -I "lift/gen/'"$MOD"'" -I tools/pcrecomp/runtime/recomp64_cpu' _ {}
+              bash -c 'f="$1"; out="$2"; inc="$3"
+                       g++ -c "$f" -o "$out" -O1 -w -std=c++20 -fpermissive $inc 2>/dev/null \
+                         || g++ -c "$f" -o "$out" -O0 -w -std=c++20 -fpermissive $inc' \
+              _ {} "lift/obj/$(basename {} .c)_${PFX}.o" "-I lift/gen/$MOD -I tools/pcrecomp/runtime/recomp64_cpu"
             echo "objetos de $MOD: $(ls lift/obj | wc -l)"
           done
         shell: bash

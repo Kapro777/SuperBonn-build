@@ -8,13 +8,19 @@
 
 #include "cpu64.h"
 #include "multimod.h"
-#include "kernel32_shims.h"
+
+// CPU atual (o handler de falta do host reporta o RIP do guest).
+CPU* g_current_cpu = nullptr;
+
+// ---- GetProcAddress dinamico (definido mais abaixo; declarado aqui) ----------
+uint64_t hle_dyn_addr(const char* name);
 
 // ---- registro de shims (extern "C" em shim_registry.c) ----------------------
 extern "C" void sb_hle_register(void* reg, int* n);
 
 typedef void (*shim_fn)(CPU*);
 typedef struct { const char* dll; const char* api; shim_fn fn; } shim_ent_t;
+
 
 static shim_ent_t g_registry[512];
 static int g_registry_n = 0;
@@ -195,7 +201,6 @@ void sb_set_module_delta(int mod_idx, int64_t delta) {
     }
 }
 
-CPU* g_current_cpu = nullptr;
 
 void sb_hle_init(void) {
     sb_hle_register(g_registry, &g_registry_n);

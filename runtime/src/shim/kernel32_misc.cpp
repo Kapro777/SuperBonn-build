@@ -23,8 +23,10 @@
 #include <sys/utsname.h>
 #endif
 
-// Resolucao dinamica de imports (hle.c do host desktop/Android) — escopo global.
+// Resolucao dinamica de imports (multimod.c do host) — escopo global.
 uint64_t hle_dyn_addr(const char* name);
+uint64_t sb_hle_module_handle(const char* dll_name);
+uint64_t sb_hle_get_proc(uint64_t hmodule, const char* name);
 
 namespace sb {
 
@@ -196,7 +198,6 @@ void sb_shim_LoadLibraryExW(CPU* c) {
     if (name_addr) {
         std::u16string w = guest_wstr_copy(c, name_addr);
         std::string a = utf16_to_utf8(w.data(), w.size());
-        extern uint64_t sb_hle_module_handle(const char*);
         handle = sb_hle_module_handle(a.c_str());
         if (handle)
             printf("[guest] LoadLibrary(\"%s\") -> modulo levantado (0x%llx)\n",
@@ -217,7 +218,6 @@ void sb_shim_GetProcAddress(CPU* c) {
     uint64_t name_addr = arg2(c);
     if (!name_addr) { ret(c, 0); return; }
     const char* name = reinterpret_cast<const char*>(sb_map_guest(name_addr));
-    extern uint64_t sb_hle_get_proc(uint64_t, const char*);
     uint64_t r = sb_hle_get_proc(hmodule, name);
     printf("[guest] GetProcAddress(0x%llx, \"%s\") -> 0x%llx\n",
            (unsigned long long)hmodule, name, (unsigned long long)r);
