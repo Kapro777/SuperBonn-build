@@ -76,9 +76,8 @@ def main() -> int:
         print("patch aplicado em eh64.c (thread_local)")
     else:
         print("eh64.c ja portatil")
-    return 0
 
-    # 3. CPU struct do guest: storage para ymm (AVX-256). O lifecycle do CPU
+    # 4. CPU struct do guest: storage para ymm (AVX-256). O lifecycle do CPU
     #    (init/reset/thread switch) e do host (nosso runtime/), entao o campo
     #    novo entra zerado como xmm.
     cpu_h = pcre / "runtime" / "recomp64_cpu" / "cpu64.h"
