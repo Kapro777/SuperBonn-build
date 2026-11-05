@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       pe_url:
-        description: 'URL (release privada) do pacote com os PE do jogo. Vazio = usar ./pe local'
+        description: 'URL (release privada) do pacote com os PE do jogo'
         required: false
-        default: ''
+        default: 'https://github.com/Kapro777/SuperBonn-assets/releases/download/pe-v1/megabonk-pe.tar.gz'
       shard:
         description: 'Shard a levantar (ex.: 0/16)'
         required: false

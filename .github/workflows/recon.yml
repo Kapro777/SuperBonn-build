@@ -9,7 +9,8 @@ on:
     inputs:
       pe_url:
         description: 'URL (release privada) do tar com os PE do jogo'
-        required: true
+        required: false
+        default: 'https://github.com/Kapro777/SuperBonn-assets/releases/download/pe-v1/megabonk-pe.tar.gz'
 
 permissions:
   contents: read

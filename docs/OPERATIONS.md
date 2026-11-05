@@ -24,8 +24,11 @@ quanto o código. Regras práticas para o mantenedor.
   são configurados para o projeto.
 - Binários do jogo só entram na máquina/CI do mantenedor via:
   - pasta local `C:\Users\USER\bonk\Megabonk\` (ignorada pelo git), ou
-  - upload manual para release **privada** do repo, ou
-  - self-hosted runner (sua máquina mesmo, quando aguentar).
+  - release **privada** do repo `Kapro777/SuperBonn-assets` (commit `4acb7ba`),
+    release `pe-v1` — a URL é o default dos inputs dos workflows `lift.yml` e
+    `recon.yml`. O repo de artefatos é separadojustamente pra o repo principal
+    nunca conter binário, e é deletável sem efeito no código.
+  - self-hosted runner (sua máquina mesma, quando aguentar).
 - O launcher, quando tiver login Steam, guarda credenciais **só no aparelho**,
   criptografadas com o keystore do Android, e nunca em log/telemetria.
 
