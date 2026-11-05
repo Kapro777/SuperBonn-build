@@ -108,8 +108,8 @@ static void apply_relocs(uint8_t* base, uint64_t delta, uint32_t rva, uint32_t s
     }
 }
 
-// Carrega o PE e devolve o RVA do entry point (0 = falha).
-uint32_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
+// Carrega o PE e devolve o endereco do entry point (0 = falha).
+uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
     FILE* f = fopen(path, "rb");
     if (!f) { printf("[loader] nao abri %s\n", path); return 0; }
     fseek(f, 0, SEEK_END);

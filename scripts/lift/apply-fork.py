@@ -57,17 +57,15 @@ def main() -> int:
     text = target.read_text(encoding="utf-8")
 
     if MARKER in text:
-        print("patch já aplicado (idempotente) — nada a fazer")
-        return 0
-
-    if ANCHOR not in text:
+        print("hook do lifter já aplicado (idempotente)")
+    elif ANCHOR not in text:
         print("ANCORA nao encontrada em lift64_cpu.py — o pcrecomp mudou de "
               "layout; insira o hook a mao em translate() (depois do catch x87)")
         return 1
-
-    patched = text.replace(ANCHOR, ANCHOR + HOOK, 1)
-    target.write_text(patched, encoding="utf-8")
-    print("patch aplicado em lift64_cpu.py")
+    else:
+        patched = text.replace(ANCHOR, ANCHOR + HOOK, 1)
+        target.write_text(patched, encoding="utf-8")
+        print("patch aplicado em lift64_cpu.py")
 
     # 3. CPU struct do guest: storage para ymm (AVX-256). O lifecycle do CPU
     #    (init/reset/thread switch) e do host (nosso runtime/), entao o campo

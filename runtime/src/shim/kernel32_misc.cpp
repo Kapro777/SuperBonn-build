@@ -23,6 +23,9 @@
 #include <sys/utsname.h>
 #endif
 
+// Resolucao dinamica de imports (hle.c do host desktop/Android) — escopo global.
+uint64_t hle_dyn_addr(const char* name);
+
 namespace sb {
 
 // ---- comparacao UTF-16 -----------------------------------------------------
@@ -196,10 +199,14 @@ void sb_shim_LoadLibraryExW(CPU* c) {
 void sb_shim_FreeLibrary(CPU* c) { (void)c; ret(c, 1); }
 
 void sb_shim_GetProcAddress(CPU* c) {
-    // O jogo percorre exports dos plugins; sem export real, devolve 0 e o
-    // jogo trata como "funcao ausente".
-    (void)c;
-    ret(c, 0);
+    // (hModule, lpProcName) — resolve pelo registro de shims do host.
+    uint64_t name_addr = arg2(c);
+    if (!name_addr) { ret(c, 0); return; }
+    const char* name = reinterpret_cast<const char*>(sb_map_guest(name_addr));
+    uint64_t r = hle_dyn_addr(name);
+    printf("[guest] GetProcAddress(\"%s\") -> 0x%llx\n", name,
+           (unsigned long long)r);
+    ret(c, r);
 }
 
 // ---- erro / console --------------------------------------------------------
@@ -252,6 +259,8 @@ void sb_shim_TerminateProcess(CPU* c) { (void)c; abort(); }
 void sb_shim_GetExitCodeProcess(CPU* c) { (void)c; ret(c, 0); }
 
 // ---- sistema ---------------------------------------------------------------
+void sb_shim_GetNativeSystemInfo(CPU* c) { sb_shim_GetSystemInfo(c); }
+
 void sb_shim_GetSystemInfo(CPU* c) {
     // SYSTEM_INFO: preenchemos o minimo (page size, #procs, allocationgranularity)
     uint64_t out = arg1(c);
@@ -289,6 +298,57 @@ void sb_shim_CompareStringW(CPU* c) {
     int r = wstr_cmp(a, b);
     ret(c, (uint64_t)(r == 0 ? 2 : r < 0 ? 1 : 3));   // CSTR_LESS_THAN/EQUAL/GREATER
 }
+
+// ---- CRT do startup ---------------------------------------------------------
+void sb_shim_GetProcessHeap(CPU* c) { ret(c, 0x48454150ull); }   // "HEAP"
+
+void sb_shim_GetStartupInfoW(CPU* c) {
+    // STARTUPINFOW: 72+ bytes; zerar o suficiente (o CRT so le lpReserved etc.)
+    uint64_t out = arg1(c);
+    if (out) for (int i = 0; i < 8; ++i) wr64(out + 8 * i, 0);
+}
+
+void sb_shim_IsProcessorFeaturePresent(CPU* c) { ret(c, 1); }
+
+void sb_shim_RtlCaptureContext(CPU* c) { (void)c; /* CONTEXT nao modelado */ ret(c, 0); }
+void sb_shim_RtlLookupFunctionEntry(CPU* c) { (void)c; ret(c, 0); }
+void sb_shim_RtlVirtualUnwind(CPU* c) { (void)c; ret(c, 0); }
+void sb_shim_RtlPcToFileHeader(CPU* c) { (void)c; ret(c, 0); }
+void sb_shim_RtlUnwindEx(CPU* c) { (void)c; ret(c, 0); }
+
+void sb_shim_SetUnhandledExceptionFilter(CPU* c) { (void)c; ret(c, 0); }
+void sb_shim_UnhandledExceptionFilter(CPU* c) { (void)c; ret(c, 1); }   // EXCEPTION_EXECUTE_HANDLER
+
+void sb_shim_RaiseException(CPU* c) {
+    uint32_t code = (uint32_t)arg1(c);
+    printf("[guest] RaiseException(0x%x) — ignorada no host\n", code);
+    ret(c, 0);
+}
+
+void sb_shim_GetEnvironmentStringsW(CPU* c) {
+    // Bloco UTF-16 terminado em duplo-NULL. Devolvemos um bloco vazio.
+    static char16_t empty[2] = {0, 0};
+    ret(c, reinterpret_cast<uint64_t>(empty));
+}
+void sb_shim_FreeEnvironmentStringsW(CPU* c) { (void)c; ret(c, 1); }
+
+void sb_shim_SetStdHandle(CPU* c) { (void)c; ret(c, 1); }
+void sb_shim_GetFileType(CPU* c) { (void)c; ret(c, 2); }   // FILE_TYPE_CHAR (console)
+void sb_shim_GetStringTypeW(CPU* c) { (void)c; ret(c, 1); }
+void sb_shim_LCMapStringW(CPU* c) {
+    // Copia a string sem transformar (lowercase/uppercase nao modelados).
+    uint64_t src = arg4(c);
+    int n = (int)(int32_t)arg_stack(c, 0);
+    uint64_t dst = arg_stack(c, 1);
+    const char16_t* s = (const char16_t*)sb_map_guest(src);
+    char16_t* d = dst ? (char16_t*)sb_map_guest(dst) : nullptr;
+    if (d) for (int i = 0; i < n; ++i) d[i] = s[i];
+    ret(c, n);
+}
+void sb_shim_GetConsoleOutputCP(CPU* c) { ret(c, 1252); }
+void sb_shim_GetConsoleMode(CPU* c) { (void)c; ret(c, 0); }
+void sb_shim_SetConsoleMode(CPU* c) { (void)c; ret(c, 1); }
+void sb_shim_SetFilePointerEx(CPU* c) { (void)c; ret(c, 1); }
 
 }  // extern "C"
 

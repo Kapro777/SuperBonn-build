@@ -21,8 +21,9 @@
 #include <mutex>
 
 // ---- runtime de execucao (vem do recomp64_cpu) -----------------------------
-void dispatch(CPU* c, uint64_t addr);      // despacha para o codigo do guest
-CPU* sb_new_guest_cpu();                   // aloca/zera um CPU do host
+// (linkage plana: casa com cpu64.h; tudo compilado como C++)
+void dispatch(CPU* c, uint64_t addr);   // despacha p/ o guest
+CPU* sb_new_guest_cpu();                // aloca/zera um CPU
 
 namespace sb {
 
@@ -120,6 +121,7 @@ static pthread_mutex_t* new_recursive_mutex() {
 void sb_shim_InitializeCriticalSection(CPU* c) {
     // O guest passa o endereco do CRITICAL_SECTION; guardamos um mutex nele.
     uint64_t addr = arg1(c);
+    if (!addr) { ret(c, 0); return; }   // defensivo: nunca crashar
     auto* mu = new_recursive_mutex();
     // O CRITICAL_SECTION do guest: LockCount, RecursionCount, OwningThread,
     // LockSemaphore, SpinCount (40 bytes). Zeramos e usamos o host mutex.
@@ -132,6 +134,16 @@ void sb_shim_InitializeCriticalSection(CPU* c) {
 void sb_shim_InitializeCriticalSectionAndSpinCount(CPU* c) {
     sb_shim_InitializeCriticalSection(c);
 }
+
+// Forms modernas: o CRT (VS2022) faz GetProcAddress nelas; sem shim, o fluxo
+// deixa de inicializar e passa ponteiro nulo adiante.
+void sb_shim_InitializeCriticalSectionEx(CPU* c) {
+    if (!arg1(c)) { ret(c, 1); return; }   // defensivo: nunca crashar
+    sb_shim_InitializeCriticalSection(c);
+    ret(c, 1);
+}
+
+void sb_shim_SetThreadStackGuarantee(CPU* c) { (void)c; ret(c, 1); }
 
 void sb_shim_EnterCriticalSection(CPU* c) {
     uint64_t addr = arg1(c);

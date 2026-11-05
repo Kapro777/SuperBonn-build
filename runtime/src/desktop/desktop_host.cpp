@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -48,6 +49,7 @@ void* sb_host_realloc(void* p, size_t n) {
 #endif
 }
 
+namespace sb {
 size_t sb_malloc_usable_size(void* p) {
 #ifdef _WIN32
     if (!p) return 0;
@@ -58,12 +60,24 @@ size_t sb_malloc_usable_size(void* p) {
     return malloc_usable_size(p);
 #endif
 }
+}  // namespace sb
 
 // ---- memoria do guest: identidade ------------------------------------------
+// (dentro de namespace sb para casar com a declaracao em winabi.h)
+namespace sb {
 void* sb_map_guest(uint64_t a) { return (void*)(uintptr_t)a; }
+}  // namespace sb
+
+// CPU novo do guest (zeroado; o host empilha/aloca como quiser).
+#include "cpu64.h"
+CPU* sb_new_guest_cpu() {
+    CPU* c = (CPU*)calloc(1, sizeof(CPU));
+    return c;
+}
 
 namespace sb {   // (para o shim compilar igual no desktop e no teste)
 
+// Nota: <string> vai no topo do arquivo — incluir dentro de namespace quebra.
 size_t guest_wstrlen(const void*, uint64_t addr) {
     const char16_t* p = (const char16_t*)sb_map_guest(addr);
     size_t n = 0;
@@ -71,7 +85,6 @@ size_t guest_wstrlen(const void*, uint64_t addr) {
     return n;
 }
 
-#include <string>
 std::u16string guest_wstr_copy(const void*, uint64_t addr) {
     const char16_t* p = (const char16_t*)sb_map_guest(addr);
     return std::u16string(p ? p : u"");

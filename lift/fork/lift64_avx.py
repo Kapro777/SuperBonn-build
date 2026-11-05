@@ -37,6 +37,9 @@ for _op in ('xor', 'and', 'or', 'andn'):
     VEX_BITWISE['v' + _op + 'ps'] = (_op, 'ps')
     VEX_BITWISE['v' + _op + 'pd'] = (_op, 'pd')
 
+# Nome -> simbolo C (o lifter emite C, nao o mnemônico!).
+OP_SYM = {'add': '+', 'sub': '-', 'mul': '*', 'div': '/'}
+
 VEX_PACKED_INT = {          # (lanes, campo, operador)
     'vpxor': ('u64', 2, '^'), 'vpand': ('u64', 2, '&'), 'vpor': ('u64', 2, '|'),
     'vpaddd': ('u32', 4, '+'), 'vpsubd': ('u32', 4, '-'),
@@ -95,7 +98,7 @@ def _scalar_vex(L, insn, m, ops, ea):
         elif op == 'max':
             expr = 'sse_max%s(%s, %s)' % ('d' if wide else 's', a, b)
         else:
-            expr = '(%s %s %s)' % (a, op, b)
+            expr = '(%s %s %s)' % (a, OP_SYM[op], b)
         out = ['c->xmm[%d].%s[0] = %s;' % (n, 'f64' if wide else 'f32', expr)]
         if L._is_xmm(s1):
             out.append('c->xmm[%d].u64[1] = c->xmm[%d].u64[1];' % (n, L._xi(s1)))
@@ -130,7 +133,7 @@ def _scalar_vex(L, insn, m, ops, ea):
             elif op == 'max':
                 e = 'sse_max%s(_v.%s[%d], _w.%s[%d])' % (ext, fld, i, fld, i)
             else:
-                e = '(_v.%s[%d] %s _w.%s[%d])' % (fld, i, op, fld, i)
+                e = '(_v.%s[%d] %s _w.%s[%d])' % (fld, i, OP_SYM[op], fld, i)
             out.append(' c->xmm[%d].%s[%d] = %s;' % (n, fld, i, e))
         out.append('}')
         return out
@@ -148,7 +151,7 @@ def _scalar_vex(L, insn, m, ops, ea):
             if op == 'andn':
                 e = '((~_v.%s[%d]) & _w.%s[%d])' % (fld, i, fld, i)
             else:
-                e = '(_v.%s[%d] %s _w.%s[%d])' % (fld, i, op, fld, i)
+                e = '(_v.%s[%d] %s _w.%s[%d])' % (fld, i, {'xor': '^', 'and': '&', 'or': '|'}[op], fld, i)
             out.append(' c->xmm[%d].%s[%d] = %s;' % (n, fld, i, e))
         out.append('}')
         return out
@@ -408,7 +411,7 @@ def _scalar_ymm(L, insn, m, ops, ea, vbase):
                 elif op == 'max':
                     e = 'sse_max%s(%s.%s[%d], %s.%s[%d])' % (ext, arr % n1, fld, i, arr % n2, fld, i)
                 else:
-                    e = '(%s.%s[%d] %s %s.%s[%d])' % (arr % n1, fld, i, op, arr % n2, fld, i)
+                    e = '(%s.%s[%d] %s %s.%s[%d])' % (arr % n1, fld, i, OP_SYM[op], arr % n2, fld, i)
                 out.append('%s.%s[%d] = %s;' % (arr % nd, fld, i, e))
         return out
 
@@ -457,25 +460,25 @@ def _sse_packed_double(L, insn, m, ops, ea):
         return ['{ XMM _s = %s; c->xmm[%d].f64[0] = sqrt(_s.f64[0]); '
                 'c->xmm[%d].f64[1] = sqrt(_s.f64[1]); }' % (L._xm(insn, s), n, n)]
     if m in ('addpd', 'subpd', 'mulpd', 'divpd', 'maxpd', 'minpd'):
-        op = m[:-2]
+        sym = {'add': '+', 'sub': '-', 'mul': '*', 'div': '/'}[m[:-2]]
         fn = {'maxpd': 'sse_maxd', 'minpd': 'sse_mind'}.get(m)
         out = ['{ XMM _w = %s;' % L._xm(insn, s)]
         for i in range(2):
             if fn:
                 e = '%s(c->xmm[%d].f64[%d], _w.f64[%d])' % (fn, n, i, i)
             else:
-                e = '(c->xmm[%d].f64[%d] %s _w.f64[%d])' % (n, i, op, i)
+                e = '(c->xmm[%d].f64[%d] %s _w.f64[%d])' % (n, i, sym, i)
             out.append(' c->xmm[%d].f64[%d] = %s;' % (n, i, e))
         out.append('}')
         return out
     if m in ('andpd', 'andnpd', 'orpd', 'xorpd'):
-        op = m[:-2]
         out = ['{ XMM _w = %s;' % L._xm(insn, s)]
         for i in range(2):
-            if op == 'andn':
+            if m == 'andnpd':
                 e = '((~c->xmm[%d].u64[%d]) & _w.u64[%d])' % (n, i, i)
             else:
-                e = '(c->xmm[%d].u64[%d] %s _w.u64[%d])' % (n, i, op, i)
+                sym = {'and': '&', 'or': '|', 'xor': '^'}[m[:-2]]
+                e = '(c->xmm[%d].u64[%d] %s _w.u64[%d])' % (n, i, sym, i)
             out.append(' c->xmm[%d].u64[%d] = %s;' % (n, i, e))
         out.append('}')
         return out

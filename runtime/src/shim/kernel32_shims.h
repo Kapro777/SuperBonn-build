@@ -77,6 +77,33 @@ void sb_shim_IsValidCodePage(CPU* c);
 void sb_shim_GetCPInfo(CPU* c);
 void sb_shim_CompareStringW(CPU* c);
 
+// kernel32_misc.cpp (CRT/startup)
+void sb_shim_GetProcessHeap(CPU* c);
+void sb_shim_GetStartupInfoW(CPU* c);
+void sb_shim_IsProcessorFeaturePresent(CPU* c);
+void sb_shim_RtlCaptureContext(CPU* c);
+void sb_shim_RtlLookupFunctionEntry(CPU* c);
+void sb_shim_RtlVirtualUnwind(CPU* c);
+void sb_shim_RtlPcToFileHeader(CPU* c);
+void sb_shim_RtlUnwindEx(CPU* c);
+void sb_shim_SetUnhandledExceptionFilter(CPU* c);
+void sb_shim_UnhandledExceptionFilter(CPU* c);
+void sb_shim_RaiseException(CPU* c);
+void sb_shim_GetEnvironmentStringsW(CPU* c);
+void sb_shim_FreeEnvironmentStringsW(CPU* c);
+void sb_shim_SetStdHandle(CPU* c);
+void sb_shim_GetFileType(CPU* c);
+void sb_shim_GetStringTypeW(CPU* c);
+void sb_shim_LCMapStringW(CPU* c);
+void sb_shim_GetConsoleOutputCP(CPU* c);
+void sb_shim_GetConsoleMode(CPU* c);
+void sb_shim_SetConsoleMode(CPU* c);
+void sb_shim_SetFilePointerEx(CPU* c);
+
+// game_entry.cpp
+void sb_shim_UnityMain2(CPU* c);
+void sb_shim_UnityMain(CPU* c);
+
 // kernel32_thread.cpp
 void sb_shim_CreateThread(CPU* c);
 void sb_shim_ExitThread(CPU* c);
@@ -86,6 +113,8 @@ void sb_shim_GetCurrentProcess(CPU* c);
 void sb_shim_GetCurrentProcessId(CPU* c);
 void sb_shim_InitializeCriticalSection(CPU* c);
 void sb_shim_InitializeCriticalSectionAndSpinCount(CPU* c);
+void sb_shim_InitializeCriticalSectionEx(CPU* c);
+void sb_shim_SetThreadStackGuarantee(CPU* c);
 void sb_shim_EnterCriticalSection(CPU* c);
 int  sb_shim_TryEnterCriticalSection(CPU* c);
 void sb_shim_LeaveCriticalSection(CPU* c);

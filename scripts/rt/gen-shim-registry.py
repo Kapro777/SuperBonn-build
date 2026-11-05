@@ -14,6 +14,7 @@ import sys
 
 HEADER = """/* GERADO por scripts/rt/gen-shim-registry.py — nao editar a mao. */
 #include "cpu64.h"
+#include "kernel32_shims.h"
 #include <stddef.h>
 
 typedef void (*shim_fn)(CPU*);
@@ -29,9 +30,9 @@ def main() -> int:
     src = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
     out = pathlib.Path(sys.argv[2])
 
-    # “void sb_shim_Xxx(CPU *c);” -> (“Xxx”, “sb_shim_Xxx”)
+    # “<qualquer tipo> sb_shim_Xxx(CPU *c);” -> (“Xxx”, “sb_shim_Xxx”)
     entries = re.findall(
-        r'^\s*(?:int\s+)?void\s+(sb_shim_(\w+))\s*\(\s*CPU\s*\*\s*c\s*\)\s*;',
+        r'^\s*[\w:]+(?:\s+\*+)?\s+(sb_shim_(\w+))\s*\(\s*CPU\s*\*\s*c\s*\)\s*;',
         src, flags=re.MULTILINE)
     if not entries:
         print("nenhum shim encontrado no header")
@@ -42,7 +43,8 @@ def main() -> int:
         'sb_shim_': 'KERNEL32.dll',
     }
     lines = [HEADER]
-    lines.append("void sb_hle_register(shim_ent_t* reg, int* n) {")
+    lines.append('extern "C" void sb_hle_register(void* reg, int* n) {')
+    lines.append("    shim_ent_t* r = (shim_ent_t*)reg;")
     lines.append("    int _i = 0;")
     lines.append("    shim_ent_t _all[] = {")
     for fn, api in entries:
@@ -50,7 +52,7 @@ def main() -> int:
         lines.append('        { "%s", "%s", %s },' % (dll, api, fn))
     lines.append("    };")
     lines.append("    int _total = (int)(sizeof(_all) / sizeof(_all[0]));")
-    lines.append("    for (; _i < _total; ++_i) reg[_i] = _all[_i];")
+    lines.append("    for (; _i < _total; ++_i) r[_i] = _all[_i];")
     lines.append("    *n = _total;")
     lines.append("}")
     lines.append("")

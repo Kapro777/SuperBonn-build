@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <string>
 
 #ifdef SB_TEST_HOST
 #include "host_mock.h"          // CPU mock + rd64/wr64/etc para teste local
@@ -51,17 +52,20 @@ inline void ret_pair(CPU* c, uint64_t lo, uint64_t hi) {
 
 // ---- memoria do guest -----------------------------------------------------
 // rd16/32/64/wr32/wr64 vem do runtime (cpu64.h no build real). Strings do
-// guest sao UTF-16; convercao via helpers abaixo.
+// guest sao UTF-16; a conversao vem dos helpers abaixo. No modelo do runtime
+// (identidade), sb_map_guest devolve o proprio endereco.
+void* sb_map_guest(uint64_t addr);
+
 inline const char16_t* guest_wstr(const CPU* c, uint64_t addr) {
     return addr ? reinterpret_cast<const char16_t*>(sb_map_guest(addr)) : nullptr;
 }
 
-// Copia no maximo n caracteres (ou NULL) de uma string do guest.
-// Retorna o comprimento (estilo wcslen).
-size_t guest_wstrlen(const CPU* c, uint64_t addr);
-std::u16string guest_wstr_copy(const CPU* c, uint64_t addr);
-std::string guest_astr_copy(const CPU* c, uint64_t addr);
-uint64_t guest_alloc_wstr(const CPU* c, const std::u16string& s);
+// Assinatura com const void* de proposito: os helpers nao usam o CPU (o
+// mapeamento eh identidade) e assim compilam iguais no mock e no host real.
+size_t guest_wstrlen(const void* c, uint64_t addr);
+std::u16string guest_wstr_copy(const void* c, uint64_t addr);
+std::string guest_astr_copy(const void* c, uint64_t addr);
+uint64_t guest_alloc_wstr(const void* c, const std::u16string& s);
 
 // Tamanho util de um bloco do heap do guest (bionic tem malloc_usable_size).
 #ifdef SB_TEST_HOST

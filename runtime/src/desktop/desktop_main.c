@@ -10,9 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "cpu64.h"
 
-uint32_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size);
+uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size);
 void hle_init(void);
 
 int main(int argc, char** argv) {
@@ -21,6 +25,23 @@ int main(int argc, char** argv) {
         return 2;
     }
     setvbuf(stdout, NULL, _IONBF, 0);
+
+#ifdef _WIN32
+    // Handler de excecao: imprime o RIP do guest quando o host faultar.
+    extern CPU* g_current_cpu;
+    AddVectoredExceptionHandler(1, [](PEXCEPTION_POINTERS ep) -> LONG {
+        CPU* c = g_current_cpu;
+        printf("[fault] codigo 0x%lx em host-rip 0x%llx | guest rip 0x%llx "
+               "rsp 0x%llx rax 0x%llx\n",
+               (unsigned long)ep->ExceptionRecord->ExceptionCode,
+               (unsigned long long)ep->ContextRecord->Rip,
+               c ? (unsigned long long)c->rip : 0,
+               c ? (unsigned long long)c->rsp : 0,
+               c ? (unsigned long long)c->rax : 0);
+        fflush(stdout);
+        return EXCEPTION_CONTINUE_SEARCH;
+    });
+#endif
 
     uint64_t base = 0;
     uint32_t size = 0;

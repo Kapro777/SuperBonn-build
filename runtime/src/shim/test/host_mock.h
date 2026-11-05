@@ -30,21 +30,21 @@ inline void wr8(uint64_t a, uint8_t v) { *reinterpret_cast<uint8_t*>(sb_map_gues
 
 // Strings do guest (teste: memoria identidade, UTF-16 literal).
 namespace sb {
-inline size_t guest_wstrlen(const CPU*, uint64_t addr) {
+inline size_t guest_wstrlen(const void*, uint64_t addr) {
     auto* p = reinterpret_cast<const char16_t*>(sb_map_guest(addr));
     size_t n = 0;
     while (p[n]) ++n;
     return n;
 }
-inline std::u16string guest_wstr_copy(const CPU*, uint64_t addr) {
+inline std::u16string guest_wstr_copy(const void*, uint64_t addr) {
     auto* p = reinterpret_cast<const char16_t*>(sb_map_guest(addr));
     return std::u16string(p ? p : u"");
 }
-inline std::string guest_astr_copy(const CPU*, uint64_t addr) {
+inline std::string guest_astr_copy(const void*, uint64_t addr) {
     auto* p = reinterpret_cast<const char*>(sb_map_guest(addr));
     return std::string(p ? p : "");
 }
-inline uint64_t guest_alloc_wstr(const CPU*, const std::u16string& s) {
+inline uint64_t guest_alloc_wstr(const void*, const std::u16string& s) {
     void* p = malloc((s.size() + 1) * sizeof(char16_t));
     memcpy(p, s.c_str(), (s.size() + 1) * sizeof(char16_t));
     return reinterpret_cast<uint64_t>(p);
