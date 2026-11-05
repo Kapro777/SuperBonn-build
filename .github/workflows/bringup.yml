@@ -1,0 +1,131 @@
+name: bringup
+
+# Bring-up completo no CI: levanta os 4 modulos, compila, linka e RODA o
+# guest no runner Linux (sem device). O log traz so contagens e mensagens
+# nossas — nada de endereco nem conteudo derivado (logs de repo publico sao
+# publicos). A saida (C, objetos, binario) vai pro repo PRIVADO.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bringup
+  cancel-in-progress: false
+
+jobs:
+  bringup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.ASSETS_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (pcrecomp + deps)
+        run: bash scripts/lift/build-toolchain.sh tools/
+
+      - name: Baixar binarios (release privada, via token)
+        run: |
+          set -euo pipefail
+          gh release download pe-v1 --repo Kapro777/SuperBonn-assets \
+              --pattern megabonk-pe.tar.gz --output pe.tar --clobber
+          mkdir -p lift/work/pe
+          tar -xf pe.tar -C lift/work/pe
+          ls lift/work/pe
+        shell: bash
+
+      - name: Aplicar fork + prefixos
+        run: python3 scripts/lift/apply-fork.py tools/pcrecomp
+
+      # ---- levanta e compila cada modulo -------------------------------------
+      - name: Levantar + compilar modulos
+        run: |
+          set -euo pipefail
+          mkdir -p lift/obj lift/gen
+          for spec in "Megabonk.exe:" "baselib.dll:BL" "UnityPlayer.dll:UP" "GameAssembly.dll:GA"; do
+            MOD="${spec%%:*}"
+            PFX="${spec##*:}"
+            echo "=== $MOD (prefixo '$PFX') ==="
+            python3 tools/pcrecomp/tools/disasm/disasm64.py \
+              "lift/work/pe/$MOD" --funcs-txt "lift/work/disasm_$MOD.txt" | tail -2
+            mkdir -p "lift/gen/$MOD"
+            python3 tools/pcrecomp/tools/lift/generate64.py \
+              "lift/work/pe/$MOD" "lift/work/disasm_$MOD.txt" \
+              "lift/gen/$MOD" --split 400 | grep -E "COMPLETE|functions|lift_errors|recomp_todo"
+            if [ -n "$PFX" ]; then
+              python3 scripts/lift/namespace-gen.py "lift/gen/$MOD" "$PFX" >/dev/null
+            fi
+            cp tools/pcrecomp/runtime/recomp64_cpu/cpu64.h "lift/gen/$MOD/"
+            ls "lift/gen/$MOD"/*.c | xargs -P "$(nproc)" -I{} \
+              bash -c 'g++ -c "$1" -o "lift/obj/$(basename "$1" .c)_'"$PFX"'.o" -O1 -w -std=c++20 \
+                       -fpermissive -I "lift/gen/'"$MOD"'" -I tools/pcrecomp/runtime/recomp64_cpu' _ {}
+            echo "objetos de $MOD: $(ls lift/obj | wc -l)"
+          done
+        shell: bash
+
+      # ---- compila o host (runtime, shims, loader) ---------------------------
+      - name: Compilar host
+        run: |
+          set -euo pipefail
+          mkdir -p build/host
+          python3 scripts/rt/gen-shim-registry.py runtime/src/shim/kernel32_shims.h build/host/shim_registry.c
+          I="-I tools/pcrecomp/runtime/recomp64_cpu -I lift/gen/Megabonk.exe \
+             -I lift/gen/UnityPlayer.dll -I lift/gen/GameAssembly.dll -I lift/gen/baselib.dll \
+             -I build/host -I runtime/src/shim -I runtime/src/desktop"
+          for f in tools/pcrecomp/runtime/recomp64_cpu/eh64.c runtime/src/desktop/pe_load.c \
+                   runtime/src/desktop/multimod.c runtime/src/desktop/desktop_main.c \
+                   runtime/src/shim/kernel32_memory.cpp runtime/src/shim/kernel32_file.cpp \
+                   runtime/src/shim/kernel32_thread.cpp runtime/src/shim/kernel32_misc.cpp \
+                   runtime/src/shim/game_entry.cpp runtime/src/desktop/desktop_host.cpp \
+                   build/host/shim_registry.c; do
+            g++ -c "$f" -o "build/host/$(basename "$f" | sed 's/\..*//').o" \
+              -O1 -w -std=c++20 -fpermissive -pthread $I
+          done
+          echo "host compilado"
+        shell: bash
+
+      # ---- link + contagens ---------------------------------------------------
+      - name: Gerar contagens e linkar
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, pathlib
+          def count(p):
+              return sum(1 for l in open(p, encoding='utf-8', errors='replace')
+                         if re.match(r'\s*\{\s*0x', l))
+          hdr = ('#pragma once\n'
+                 'const uint32_t SB_EXE_IMPORTS = %d;\n'
+                 'const uint32_t SB_UP_IMPORTS = %d;\n') % (
+              count('lift/gen/Megabonk.exe/recomp_imports.c'),
+              count('lift/gen/UnityPlayer.dll/recomp_imports.c'))
+          pathlib.Path('build/host/sb_counts.h').write_text(hdr, encoding='utf-8')
+          print(hdr)
+          PY
+          g++ -o build/sb_desktop lift/obj/*.o build/host/*.o -pthread -O1 -w
+          echo "link ok"
+        shell: bash
+
+      # ---- RODA o guest ---------------------------------------------------------
+      - name: Bring-up (rodar o guest no runner)
+        run: |
+          set -euo pipefail
+          set +e
+          ./build/sb_desktop lift/work/pe/Megabonk.exe lift/work/pe/UnityPlayer.dll 2>&1 | tail -25
+          echo "exit=$?"
+        shell: bash
+
+      # ---- publica no repo privado -------------------------------------------------
+      - name: Publicar C + objetos + binario no repo PRIVADO
+        if: always()
+        run: |
+          set -euo pipefail
+          TAG="bringup-${{ github.run_id }}"
+          tar -czf bringup.tar.gz -C lift gen -C ../.. lift/obj build/sb_desktop 2>/dev/null || true
+          gh release create "$TAG" bringup.tar.gz \
+            --repo Kapro777/SuperBonn-assets \
+            --title "Bring-up (run ${{ github.run_id }})" \
+            --notes "C levantado, objetos, binario do host e log do bring-up. Derivado dos binarios: fica privado." | tail -1
+          rm -rf lift build bringup.tar.gz
+        shell: bash
