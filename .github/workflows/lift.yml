@@ -91,6 +91,29 @@ jobs:
           echo "bytes gerados: $(du -sb lift/work/gen | cut -f1)"
         shell: bash
 
+      # Prefixo por modulo: exe fica sem prefixo; os outros modulos precisam
+      # de simbolos proprios para linkar juntos (UP/GA).
+      - name: Prefixar simbolos do modulo
+        run: |
+          set -euo pipefail
+          case "${{ inputs.module }}" in
+            Megabonk.exe)    PFX="" ;;
+            UnityPlayer.dll) PFX="UP" ;;
+            GameAssembly.dll) PFX="GA" ;;
+            baselib.dll)     PFX="BL" ;;
+            *)               PFX="M" ;;
+          esac
+          if [ -n "$PFX" ]; then
+            mkdir -p lift/work/gen_ns
+            cp lift/work/gen/* lift/work/gen_ns/
+            python3 scripts/lift/namespace-gen.py lift/work/gen_ns "$PFX" >/dev/null
+            rm -rf lift/work/gen && mv lift/work/gen_ns lift/work/gen
+            echo "prefixado com $PFX"
+          else
+            echo "sem prefixo (modulo principal)"
+          fi
+        shell: bash
+
       # O C gerado compila rapido no runner e levaria um dia no Celeron:
       # objetos do host (Linux x86-64) saem daqui e vao pro repo privado.
       - name: Compilar objetos do host (paralelo)
