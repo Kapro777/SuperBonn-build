@@ -76,17 +76,29 @@ def main() -> int:
     htext = cpu_h.read_text(encoding="utf-8")
     if "XMM ymm[16];" in htext:
         print("cpu64.h ja tem ymm[16]")
-        return 0
-    if "XMM      xmm[16];" not in htext:
+    elif "XMM      xmm[16];" in htext:
+        htext = htext.replace(
+            "XMM      xmm[16];",
+            "XMM      xmm[16];\n    XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */",
+            1)
+        cpu_h.write_text(htext, encoding="utf-8")
+        print("patch aplicado em cpu64.h (ymm[16])")
+    else:
         print("ANCORA do cpu64.h nao encontrada (layout mudou); ymm ficou sem "
               "storage — as instrucoes 256-bit vao continuar em TODO")
+
+    htext = cpu_h.read_text(encoding="utf-8")
+    if "uint64_t mm[8];" in htext:
+        print("cpu64.h ja tem mm[8]")
         return 0
-    htext = htext.replace(
-        "XMM      xmm[16];",
-        "XMM      xmm[16];\n    XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */",
-        1)
-    cpu_h.write_text(htext, encoding="utf-8")
-    print("patch aplicado em cpu64.h (ymm[16])")
+    if "XMM      ymm[16];" in htext:
+        htext = htext.replace(
+            "XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */",
+            "XMM      ymm[16];   /* SuperBonn: AVX-256 upper half */\n"
+            "    uint64_t  mm[8];    /* SuperBonn: MMX (memcmp MMX do CRT) */",
+            1)
+        cpu_h.write_text(htext, encoding="utf-8")
+        print("patch aplicado em cpu64.h (mm[8])")
     return 0
 
 

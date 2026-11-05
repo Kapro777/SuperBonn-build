@@ -521,6 +521,124 @@ def _sad(L, insn, m, ops, ea, vbase):
     return None
 
 
+def _mi(L, op):
+    """Indice de um operando MMX (mm0..mm7)."""
+    name = L.rname(op.reg) if op.type == X86_OP_REG else '<mem>'
+    if not name.startswith('mm') or not name[2:].isdigit():
+        raise NotImplementedError('not an mm operand: %s' % name)
+    return int(name[2:])
+
+
+def _is_mm(L, op):
+    return op.type == X86_OP_REG and L.rname(op.reg).startswith('mm')
+
+
+def _mmx(L, insn, m, ops, ea):
+    """MMX (memcmp do CRT): movq/psadbw/paddw/pxor nos registradores mm*.
+
+    Storage: 8x uint64 no CPU struct (patch em cpu64.h). O x87 tag word nao e
+    modelado — nada mais no binario usa x87 (ver docstring do lift64_cpu).
+    """
+    if not any(_is_mm(L, o) for o in ops):
+        return None
+    if m == 'movq':
+        d, s = ops[0], ops[1]
+        if _is_mm(L, d) and _is_mm(L, s):
+            return ['c->mm[%d] = c->mm[%d];' % (_mi(L, d), _mi(L, s))]
+        if _is_mm(L, d):
+            src = L.src(insn, s)
+            return ['c->mm[%d] = %s;' % (_mi(L, d), src)]
+        if _is_mm(L, s):
+            return [L.dst_write(insn, d, 'c->mm[%d]' % _mi(L, s))]
+        return None
+    if m == 'psadbw':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        return ['{ const uint8_t* _pa = (const uint8_t*)&c->mm[%d]; '
+                'uint64_t _w = %s; const uint8_t* _pb = (const uint8_t*)&_w; '
+                'unsigned _s0 = 0; '
+                'for (int _i = 0; _i < 8; ++_i) { '
+                '  int _d0 = _pa[_i] - _pb[_i]; _s0 += (_d0 < 0 ? -_d0 : _d0); } '
+                'c->mm[%d] = (uint64_t)_s0; }'
+                % (n, L._sd(insn, s) if not _is_mm(L, s) else 'c->mm[%d]' % _mi(L, s),
+                   n)]
+    if m == 'paddw':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['{ uint64_t _a = c->mm[%d], _b = %s, _r = 0; '
+                'for (int _i = 0; _i < 4; ++_i) '
+                '  _r |= (uint64_t)(uint16_t)((uint16_t)(_a >> (16*_i)) + '
+                '                          (uint16_t)(_b >> (16*_i))) << (16*_i); '
+                'c->mm[%d] = _r; }' % (n, w, n)]
+    if m == 'pxor':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['c->mm[%d] ^= %s;' % (n, w)]
+    if m == 'pand':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['c->mm[%d] &= %s;' % (n, w)]
+    if m == 'por':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['c->mm[%d] |= %s;' % (n, w)]
+    if m in ('psrlq', 'psllq'):
+        d, s = ops[0], ops[1]
+        if s.type != X86_OP_IMM:
+            return None
+        cnt = s.imm & 63
+        n = _mi(L, d)
+        op = '>>=' if m == 'psrlq' else '<<='
+        return ['c->mm[%d] %s UINT64_C(%d);' % (n, op, cnt)]
+    if m in ('psrlw', 'psllw', 'psrld', 'pslld'):
+        d, s = ops[0], ops[1]
+        if s.type != X86_OP_IMM:
+            return None
+        cnt = s.imm & 0xFF
+        bits = {'w': 16, 'd': 32}[m[3]]
+        n = _mi(L, d)
+        op = '>>' if m.startswith('psrl') else '<<'
+        lanes = 64 // bits
+        stmts = []
+        for i in range(lanes):
+            shift = bits * i
+            stmts.append('_r |= ((_a >> %d) %s %d) << %d;' % (shift, op, cnt, shift))
+        return ['{ uint64_t _a = c->mm[%d], _r = 0; %s c->mm[%d] = _r; }'
+                % (n, ' '.join(stmts), n)]
+    if m == 'psubusb':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['{ uint64_t _a = c->mm[%d], _b = %s, _r = 0; '
+                'for (int _i = 0; _i < 8; ++_i) { '
+                '  unsigned _x = (unsigned)((_a >> (8*_i)) & 0xFF), _y = (unsigned)((_b >> (8*_i)) & 0xFF); '
+                '  _r |= (uint64_t)(_x > _y ? _x - _y : 0) << (8*_i); } '
+                'c->mm[%d] = _r; }' % (n, w, n)]
+    if m == 'paddb':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['{ uint64_t _a = c->mm[%d], _b = %s, _r = 0; '
+                'for (int _i = 0; _i < 8; ++_i) '
+                '  _r |= (uint64_t)(uint8_t)(((_a >> (8*_i)) & 0xFF) + '
+                '                          ((_b >> (8*_i)) & 0xFF)) << (8*_i); '
+                'c->mm[%d] = _r; }' % (n, w, n)]
+    if m == 'punpcklbw':
+        d, s = ops[0], ops[1]
+        n = _mi(L, d)
+        w = 'c->mm[%d]' % _mi(L, s) if _is_mm(L, s) else L._sd(insn, s)
+        return ['{ uint64_t _a = c->mm[%d], _b = %s, _r = 0; '
+                'for (int _i = 0; _i < 4; ++_i) { '
+                '  _r |= ((_a >> (8*_i)) & 0xFF) << (16*_i); '
+                '  _r |= ((_b >> (8*_i)) & 0xFF) << (16*_i + 8); } '
+                'c->mm[%d] = _r; }' % (n, w, n)]
+    return None
+
+
 def lift_avx(L, insn, m, ops, ea):
     # ---- 1. no-ops seguros no host ----------------------------------------
     if m == 'int' and len(ops) == 1 and ops[0].type == X86_OP_IMM \
@@ -541,18 +659,32 @@ def lift_avx(L, insn, m, ops, ea):
         return [L.dst_write(insn, ops[0], '__builtin_bswap%s(%s)'
                             % (w, L.src(insn, ops[0])))]
 
-    # ---- 2. SSE2 packed-double nao-VEX ------------------------------------
-    if not m.startswith('v'):
-        return _sse_packed_double(L, insn, m, ops, ea)
+    # ---- 2. MMX (memcmp do CRT): movq/psadbw/paddw/pxor/... -----------------
+    if any(_is_mm(L, o) for o in ops):
+        out = _mmx(L, insn, m, ops, ea)
+        if out is not None:
+            return out
+        return None
 
-    # ---- 3. ymm (AVX-256): duas metades de 128 ----------------------------
+    # ---- 3. ymm (AVX-256): decompõe em duas metades de 128 -----------------
     if any(_is_ymm(L, o) for o in ops):
         out = _scalar_ymm(L, insn, m, ops, ea, m[1:])
         if out is not None:
             return out
         return None
 
-    # ---- 3. SAD (comum a SSE e VEX) ----------------------------------------
+    # ---- 3. cmpxchg16b (lock-free tables) ----------------------------------
+    if m == 'cmpxchg16b' and len(ops) >= 2:
+        addr = L.addr_expr(insn, ops[1])
+        return ['{ XMM _m; memset(&_m, 0, sizeof(_m)); rd128(%s, &_m); '
+                'if (_m.u64[0] == c->rax && _m.u64[1] == c->rdx) { '
+                '  XMM _n; memset(&_n, 0, sizeof(_n)); '
+                '  _n.u64[0] = c->rbx; _n.u64[1] = c->rcx; wr128(%s, &_n); '
+                '  c->zf = 1; } '
+                'else { c->rax = _m.u64[0]; c->rdx = _m.u64[1]; c->zf = 0; } }'
+                % (addr, addr)]
+
+    # ---- 4. SAD (comum a SSE e VEX) ---------------------------------------
     vbase = m[1:] if m.startswith('v') else m
     sad = _sad(L, insn, m, ops, ea, vbase)
     if sad is not None:
@@ -562,5 +694,5 @@ def lift_avx(L, insn, m, ops, ea):
     if not m.startswith('v'):
         return _sse_packed_double(L, insn, m, ops, ea)
 
-    # ---- 5. VEX 128-bit ----------------------------------------------------
+    # ---- 5. VEX 128-bit ---------------------------------------------------
     return _scalar_vex(L, insn, m, ops, ea)

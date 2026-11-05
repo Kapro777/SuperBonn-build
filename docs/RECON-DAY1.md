@@ -86,11 +86,22 @@ div:/idiv:                -> numerador 128-bit real (conservador, raro)
 | SSE2 packed-double | `sqrtpd/addpd/andpd/...` |
 | no-ops | `int 0x29` (CFE), `xgetbv` (XCR0 0x7), `sfence/lfence/mfence`, `vzeroupper` |
 
-**Medido no `Megabonk.exe`** (o gate): **172 → 4 sitios RECOMP_TODO** (só os
-`div:` conservadores), com 0 erros de lift. Regra do fork: forma desconhecida
-devolve `None` e o lifter original emite o TODO com nome e endereço — nunca
-levanta errado em silêncio. Os números do `GameAssembly`/`UnityPlayer` com o
-fork estão sendo medidos agora (script `scripts/lift/run-lifts-with-fork.ps1`).
+**Medido com o fork completo (v6)** — `scripts/lift/run-lifts-with-fork.ps1`:
+
+| Módulo | TODO original | TODO com fork | Redução |
+| --- | --- | --- | --- |
+| `Megabonk.exe` | 172 | **6** | -96% |
+| `GameAssembly.dll` | 3.106 | **560** | -82% |
+| `UnityPlayer.dll` | 22.331 | **7.160** | -68% |
+
+O que sobrou: `div:` conservador (só dispara em runtime quando o numerador 128-bit
+é real — 693 em UnityPlayer, 288 em GameAssembly); op MMX residuais; e ~700
+instruções de **port I/O** (`insd`/`outsd`/`int 0x70`) que são **dados lidos como
+código** pelo recursive descent — nunca executadas em código real; se algum dia
+forem atingidas, o runtime aborta alto (by design, nunca silencia).
+
+Regra do fork mantida: forma desconhecida devolve `None` e o lifter original
+emite o TODO com nome e endereço — nunca levanta errado em silêncio.
 
 **Lacunas conhecidas que ficaram**: `div:` 128-bit (conservador, só dispara em
 runtime se `rdx != 0`), VCVT 256-bit, `vgather*`, x87/MMX (o IL2CPP praticamente

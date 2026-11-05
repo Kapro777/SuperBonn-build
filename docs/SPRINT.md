@@ -1,4 +1,36 @@
-# Sprint SuperBonn — 5 dias (v2)
+# Sprint SuperBonn — estado real (calendário: **Dia 1**)
+
+> **Atenção ao calendário:** hoje é o **Dia 1** do sprint. O que está marcado
+> como feito abaixo foi feito **dentro do Dia 1** — o sprint está muito
+> adiantado. Nada aqui é promessa; tudo tem número medido.
+
+## Feito
+
+| Item | Estado | Medição |
+| --- | --- | --- |
+| Repo privado + push | ✅ | github.com/Kapro777/SuperBonn, 9+ commits |
+| RE: censo de imports, PE analyze | ✅ | `docs/RECON-DAY1.md` |
+| Lift dos 4 módulos (disasm64+generate64) | ✅ | 439 + 796 + **148.582** + 62.211 funções, **0 erros**, ~1,8 GB de C, tudo no Celeron em minutos |
+| Fork do lifter (AVX/ymm/FMA/SSE2/MMX/SAD/CFE) | ✅ | TODOs: exe **172→6**, GameAssembly **3.106→560**, UnityPlayer **22.331→7.160** (-70% no total) |
+| Shims Win32 + testes no host | 🟡 | memória/arquivo/thread/misc: **42 testes passando** (`scripts/rt/test-shims.ps1`) |
+| Build desktop p/ iterar sem device | 🟡 | esqueleto do job `desktop-bringup` no CI |
+
+## O que ainda falta (ordem)
+
+1. `user32`, `ws2_32`, `advapi32`, `winmm`/input, DXCore (89 APIs de adapter)
+2. **Compilar** o C levantado (CI `runtime.yml` + `desktop-bringup`)
+3. `difftest64` (oráculo de correção; precisa de MSVC local ou variante Linux)
+4. Dia 4: decisão do backend gráfico (vkd3d-proton arm64 vs DXVK-arm64)
+5. Boot real: `Megabonk.exe` → UnityMain → primeira tela no device
+
+## Kill switches ativos
+
+1. Cursor de TODO: GameAssembly 560 e UnityPlayer 7.160 — compostos de
+   `div:` conservador (só dispara em runtime), MMX residual, e ~700 instruções
+   de **I/O de porta** (`insd/outsd/int 0x70`) que são **dados lidos como
+   código** — só importam se executados; o runtime aborta alto nesse caso.
+2. CI estourando RAM/tempo → reduz shard ou self-hosted.
+3. Pedido de remoção da Ved/Unity/Valve → 48h (`docs/LEGAL.md`).
 
 Base: **pcrecomp** (toolbox de recompilação x86-64, MIT) + Il2CppDumper.
 Precedente: **Skyrim_Android** (recompilação estática de jogo de PC para
