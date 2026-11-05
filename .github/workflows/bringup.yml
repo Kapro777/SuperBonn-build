@@ -108,11 +108,16 @@ jobs:
         shell: bash
 
       # ---- RODA o guest ---------------------------------------------------------
+      # Os 4 modulos: exe + UnityPlayer + GameAssembly + baselib. O loader poe
+      # cada um na base preferida (ou realoca); GameAssembly fica disponivel
+      # para o LoadLibrary/GetProcAddress do IL2CPP.
       - name: Bring-up (rodar o guest no runner)
         run: |
-          set -euo pipefail
           set +e
-          ./build/sb_desktop lift/work/pe/Megabonk.exe lift/work/pe/UnityPlayer.dll 2>&1 | tail -25
+          ./build/sb_desktop lift/work/pe/Megabonk.exe \
+            lift/work/pe/UnityPlayer.dll \
+            lift/work/pe/GameAssembly.dll \
+            lift/work/pe/baselib.dll 2>&1 | tail -30
           echo "exit=$?"
         shell: bash
 

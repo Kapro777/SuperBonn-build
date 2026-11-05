@@ -73,6 +73,29 @@ uint64_t sb_hle_slot_addr(sb_module_t* m, const char* dll, const char* name) {
     return 0;
 }
 
+// ---- linking dinâmico (LoadLibrary/GetProcAddress do guest) -----------------
+// Handle sintético: HLE_DYNMOD_BASE + indice do modulo.
+#define DYNMOD_BASE 0x0000500000000000ull
+
+uint64_t sb_hle_module_handle(const char* dll_name) {
+    for (int i = 0; i < g_mods_n; ++i)
+        if (strcmp(g_mods[i].dll_name, dll_name) == 0)
+            return DYNMOD_BASE + (uint64_t)i;
+    return 0;
+}
+
+uint64_t sb_hle_get_proc(uint64_t hmodule, const char* name) {
+    if (hmodule < DYNMOD_BASE || hmodule >= DYNMOD_BASE + (uint64_t)g_mods_n) {
+        // módulo desconhecido (DLL do sistema): tenta os shims
+        return hle_dyn_addr(name);
+    }
+    int idx = (int)(hmodule - DYNMOD_BASE);
+    const sb_export_t* ex = g_exports[idx];
+    for (int k = 0; k < g_export_counts[idx]; ++k)
+        if (strcmp(ex[k].name, name) == 0) return ex[k].va;   // função levantada!
+    return hle_dyn_addr(name);
+}
+
 // ---- dispatch ----------------------------------------------------------------------
 static int  g_trace = -1;
 
@@ -157,6 +180,21 @@ uint64_t hle_dyn_addr(const char* name) {
 
 // ---- init ---------------------------------------------------------------------------
 int64_t g_image_delta = 0;
+// Deltas por modulo (cada TU compila com -Dg_image_delta=<PFX>_g_image_delta,
+// entao modulos que precisam de relocacao tem o seu proprio simbolo).
+int64_t UP_g_image_delta = 0;
+int64_t GA_g_image_delta = 0;
+int64_t BL_g_image_delta = 0;
+
+void sb_set_module_delta(int mod_idx, int64_t delta) {
+    switch (mod_idx) {
+        case 1: UP_g_image_delta = delta; break;
+        case 2: GA_g_image_delta = delta; break;
+        case 3: BL_g_image_delta = delta; break;
+        default: g_image_delta = delta; break;
+    }
+}
+
 CPU* g_current_cpu = nullptr;
 
 void sb_hle_init(void) {

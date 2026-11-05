@@ -189,23 +189,38 @@ void sb_shim_GetModuleFileNameW(CPU* c) {
 }
 
 void sb_shim_LoadLibraryExW(CPU* c) {
-    // Plugins (steam_api64, discord_game_sdk, Rewired) sao todos stubados no
-    // host (ver steam_shim.cpp). Devolvemos um handle sintetico nao-NULL para
-    // o fluxo do jogo seguir.
-    (void)c;
-    ret(c, 0x0000500000000000ull);
+    // (lpLibFileName, hFile, dwFlags) — se for um modulo que levantamos,
+    // devolve o handle dele (linking dinamico de verdade).
+    uint64_t name_addr = arg1(c);
+    uint64_t handle = 0;
+    if (name_addr) {
+        std::u16string w = guest_wstr_copy(c, name_addr);
+        std::string a = utf16_to_utf8(w.data(), w.size());
+        extern uint64_t sb_hle_module_handle(const char*);
+        handle = sb_hle_module_handle(a.c_str());
+        if (handle)
+            printf("[guest] LoadLibrary(\"%s\") -> modulo levantado (0x%llx)\n",
+                   a.c_str(), (unsigned long long)handle);
+    }
+    if (!handle) {
+        // DLL do sistema (steam_api64, discord...): handle sintetico.
+        handle = 0x0000500000000000ull;
+    }
+    ret(c, handle);
 }
 
 void sb_shim_FreeLibrary(CPU* c) { (void)c; ret(c, 1); }
 
 void sb_shim_GetProcAddress(CPU* c) {
-    // (hModule, lpProcName) — resolve pelo registro de shims do host.
+    // (hModule, lpProcName) — resolve no modulo levantado ou nos shims.
+    uint64_t hmodule = arg1(c);
     uint64_t name_addr = arg2(c);
     if (!name_addr) { ret(c, 0); return; }
     const char* name = reinterpret_cast<const char*>(sb_map_guest(name_addr));
-    uint64_t r = hle_dyn_addr(name);
-    printf("[guest] GetProcAddress(\"%s\") -> 0x%llx\n", name,
-           (unsigned long long)r);
+    extern uint64_t sb_hle_get_proc(uint64_t, const char*);
+    uint64_t r = sb_hle_get_proc(hmodule, name);
+    printf("[guest] GetProcAddress(0x%llx, \"%s\") -> 0x%llx\n",
+           (unsigned long long)hmodule, name, (unsigned long long)r);
     ret(c, r);
 }
 

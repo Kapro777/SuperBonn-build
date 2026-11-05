@@ -94,9 +94,9 @@ def _scalar_vex(L, insn, m, ops, ea):
         n = L._xi(d)
         a, b = _lane(L, insn, s1, wide), _lane(L, insn, s2, wide)
         if op == 'min':
-            expr = 'sse_min%s(%s, %s)' % ('d' if wide else 's', a, b)
+            expr = 'sse_min%s(%s, %s)' % ('d' if wide else 'f', a, b)
         elif op == 'max':
-            expr = 'sse_max%s(%s, %s)' % ('d' if wide else 's', a, b)
+            expr = 'sse_max%s(%s, %s)' % ('d' if wide else 'f', a, b)
         else:
             expr = '(%s %s %s)' % (a, OP_SYM[op], b)
         out = ['c->xmm[%d].%s[0] = %s;' % (n, 'f64' if wide else 'f32', expr)]
@@ -110,8 +110,8 @@ def _scalar_vex(L, insn, m, ops, ea):
         if not L._is_xmm(d):
             return None
         n = L._xi(d)
-        out = ['c->xmm[%d].%s[0] = sqrt%s(%s);'
-               % (n, 'f64' if wide else 'f32', 'd' if wide else 's',
+        out = ['c->xmm[%d].%s[0] = %s(%s);'
+               % (n, 'f64' if wide else 'f32', 'sqrt' if wide else 'sqrtf',
                   _lane(L, insn, s2, wide))]
         if L._is_xmm(s1):
             out.append('c->xmm[%d].u64[1] = c->xmm[%d].u64[1];' % (n, L._xi(s1)))
@@ -125,13 +125,12 @@ def _scalar_vex(L, insn, m, ops, ea):
             return None
         n = L._xi(d)
         fld, nlanes = ('f64', 2) if wide else ('f32', 4)
-        ext = 'd' if wide else 's'
         out = ['{ XMM _v = %s, _w = %s;' % (L._xm(insn, s1), L._xm(insn, s2))]
         for i in range(nlanes):
             if op == 'min':
-                e = 'sse_min%s(_v.%s[%d], _w.%s[%d])' % (ext, fld, i, fld, i)
+                e = 'sse_min%s(_v.%s[%d], _w.%s[%d])' % ('d' if wide else 'f', fld, i, fld, i)
             elif op == 'max':
-                e = 'sse_max%s(_v.%s[%d], _w.%s[%d])' % (ext, fld, i, fld, i)
+                e = 'sse_max%s(_v.%s[%d], _w.%s[%d])' % ('d' if wide else 'f', fld, i, fld, i)
             else:
                 e = '(_v.%s[%d] %s _w.%s[%d])' % (fld, i, OP_SYM[op], fld, i)
             out.append(' c->xmm[%d].%s[%d] = %s;' % (n, fld, i, e))
@@ -402,14 +401,13 @@ def _scalar_ymm(L, insn, m, ops, ea, vbase):
         nd, n1, n2 = _yi(L, d), _yi(L, s1), _yi(L, s2)
         wide = suf == 'pd'
         fld, nlanes = ('f64', 2) if wide else ('f32', 4)
-        ext = 'd' if wide else 's'
         out = []
         for arr in ('c->xmm[%d]', 'c->ymm[%d]'):
             for i in range(nlanes):
                 if op == 'min':
-                    e = 'sse_min%s(%s.%s[%d], %s.%s[%d])' % (ext, arr % n1, fld, i, arr % n2, fld, i)
+                    e = 'sse_min%s(%s.%s[%d], %s.%s[%d])' % ('d' if wide else 'f', arr % n1, fld, i, arr % n2, fld, i)
                 elif op == 'max':
-                    e = 'sse_max%s(%s.%s[%d], %s.%s[%d])' % (ext, arr % n1, fld, i, arr % n2, fld, i)
+                    e = 'sse_max%s(%s.%s[%d], %s.%s[%d])' % ('d' if wide else 'f', arr % n1, fld, i, arr % n2, fld, i)
                 else:
                     e = '(%s.%s[%d] %s %s.%s[%d])' % (arr % n1, fld, i, OP_SYM[op], arr % n2, fld, i)
                 out.append('%s.%s[%d] = %s;' % (arr % nd, fld, i, e))

@@ -36,12 +36,15 @@ extern const sb_import_t UPrecomp_imports[];
 typedef struct { const char* name; uint64_t va; } sb_export_t;
 
 uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size);
+uint64_t sb_load_pe_ex(const char* path, uint64_t* out_base, uint32_t* out_size,
+                       int64_t* out_delta, int try_alt);
 int     sb_pe_exports(const char* path, sb_export_t* out, int cap);
 void    sb_hle_register_module(const sb_module_t* m);
 void    sb_hle_set_exports(int mod_idx, const sb_export_t* exps, int n);
 sb_module_t* sb_hle_module(int i);
 uint64_t sb_hle_slot_addr(sb_module_t* m, const char* dll, const char* name);
 void    sb_hle_init(void);
+void    sb_set_module_delta(int mod_idx, int64_t delta);
 
 #define SB_MAX_MODS 8
 #define SB_EXPORT_CAP 2048
@@ -73,14 +76,20 @@ int main(int argc, char** argv) {
     });
 #endif
 
-    // ---- 1. carrega cada PE ---------------------------------------------------
+    // ---- 1. carrega cada PE (com relocacao se a base preferida estiver tomada)
+    int64_t deltas[SB_MAX_MODS] = {0};
     for (int i = 0; i < n_mods; ++i) {
         uint32_t size = 0;
         bases[i] = 0;
-        entries[i] = sb_load_pe(argv[i + 1], &bases[i], &size);
+        entries[i] = sb_load_pe_ex(argv[i + 1], &bases[i], &size, &deltas[i], 1);
         if (!entries[i]) { printf("[main] falha carregando %s\n", argv[i + 1]); return 1; }
+        sb_set_module_delta(i, deltas[i]);
         export_counts[i] = sb_pe_exports(argv[i + 1], exports[i], SB_EXPORT_CAP);
-        printf("[main] %s: %d exports\n", argv[i + 1], export_counts[i]);
+        // exports vem com base preferida: soma o delta do modulo
+        for (int k = 0; k < export_counts[i]; ++k)
+            exports[i][k].va = (uint64_t)((int64_t)exports[i][k].va + deltas[i]);
+        printf("[main] %s: %d exports (base 0x%llx)\n", argv[i + 1],
+               export_counts[i], (unsigned long long)bases[i]);
     }
 
     // ---- 3. registra os modulos -------------------------------------------------

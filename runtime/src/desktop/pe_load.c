@@ -175,7 +175,10 @@ int sb_pe_exports(const char* path, sb_export_t* out, int cap) {
 }
 
 // Carrega o PE e devolve o endereco do entry point (0 = falha).
-uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
+// Se a base preferida estiver ocupada, escolhe outra e aplica relocacoes —
+// o delta volta em *out_delta (quem chamar ajusta o g_image_delta do modulo).
+uint64_t sb_load_pe_ex(const char* path, uint64_t* out_base, uint32_t* out_size,
+                       int64_t* out_delta, int try_alt) {
     FILE* f = fopen(path, "rb");
     if (!f) { printf("[loader] nao abri %s\n", path); return 0; }
     fseek(f, 0, SEEK_END);
@@ -193,7 +196,18 @@ uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
     uint64_t preferred = oh->ImageBase;
     uint32_t size_of_image = oh->SizeOfImage;
 
+    // Base real: a preferida, ou uma alternativa (64 MB acima dela) quando
+    // outro modulo ja a ocupou — UnityPlayer e GameAssembly dividem 0x180000000.
+    uint64_t real_base = preferred;
     void* mapped = sb_reserve_at(preferred, size_of_image);
+    if (!mapped && try_alt) {
+        uint64_t alt = preferred + 0x4000000ull;   // +64 MB
+        for (int t = 0; t < 64 && !mapped; ++t) {
+            mapped = sb_reserve_at(alt, size_of_image);
+            if (mapped) { real_base = alt; break; }
+            alt += 0x4000000ull;
+        }
+    }
     if (!mapped) {
         printf("[loader] nao reservei %zu bytes em 0x%llx\n",
                (size_t)size_of_image, (unsigned long long)preferred);
@@ -216,17 +230,25 @@ uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
         if (n) memcpy((uint8_t*)mapped + va, buf + rva, n);
     }
 
-    // relocacoes (delta 0 quando a base preferida foi obtida)
-    uint64_t delta = preferred - preferred;   // = 0; mantido explicito
-    apply_relocs((uint8_t*)mapped, delta,
+    // relocacoes: delta = base real - base preferida
+    int64_t delta = (int64_t)(real_base - preferred);
+    apply_relocs((uint8_t*)mapped, (uint64_t)delta,
                  oh->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress,
                  oh->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 
-    *out_base = preferred;
+    *out_base = real_base;
     *out_size = size_of_image;
+    if (out_delta) *out_delta = delta;
     uint32_t entry = oh->AddressOfEntryPoint;
     free(buf);
-    printf("[loader] mapeado 0x%llx (%u bytes), entry RVA 0x%x\n",
-           (unsigned long long)preferred, size_of_image, entry);
-    return entry ? preferred + entry : preferred;
+    printf("[loader] mapeado 0x%llx (%u bytes, delta 0x%llx), entry RVA 0x%x\n",
+           (unsigned long long)real_base, size_of_image,
+           (unsigned long long)delta, entry);
+    return entry ? (uint64_t)((int64_t)(preferred + entry) + delta)
+                 : (uint64_t)((int64_t)preferred + delta);
+}
+
+// Wrapper compatível (base preferida, delta 0).
+uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size) {
+    return sb_load_pe_ex(path, out_base, out_size, nullptr, 0);
 }
