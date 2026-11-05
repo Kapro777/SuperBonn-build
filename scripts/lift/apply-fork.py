@@ -67,6 +67,17 @@ def main() -> int:
         target.write_text(patched, encoding="utf-8")
         print("patch aplicado em lift64_cpu.py")
 
+    # 3. eh64.c: __declspec(thread) é Windows-only; thread_local é portátil
+    eh = pcre / "runtime" / "recomp64_cpu" / "eh64.c"
+    etext = eh.read_text(encoding="utf-8")
+    if "__declspec(thread)" in etext:
+        etext = etext.replace("__declspec(thread)", "thread_local")
+        eh.write_text(etext, encoding="utf-8")
+        print("patch aplicado em eh64.c (thread_local)")
+    else:
+        print("eh64.c ja portatil")
+    return 0
+
     # 3. CPU struct do guest: storage para ymm (AVX-256). O lifecycle do CPU
     #    (init/reset/thread switch) e do host (nosso runtime/), entao o campo
     #    novo entra zerado como xmm.

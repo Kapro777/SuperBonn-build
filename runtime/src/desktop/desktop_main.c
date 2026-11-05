@@ -128,6 +128,9 @@ int main(int argc, char** argv) {
     }
 
     sb_hle_init();
+    // eh64.c (excecoes C++ do guest) usa a base do modulo principal.
+    extern uint64_t es3_eh_image_base;
+    es3_eh_image_base = bases[0];
     printf("[main] entrando no guest em 0x%llx\n", (unsigned long long)entries[0]);
 
     // ---- 5. pilha + CPU + dispatch -------------------------------------------------
