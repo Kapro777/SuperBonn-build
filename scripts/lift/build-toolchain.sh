@@ -15,6 +15,11 @@ cd "$DEST"
 
 python3 -V || { echo "Python 3.11 necessario"; exit 1; }
 
+# Dependencias Python do pipeline (disasm/lift/analise de PE)
+python3 -m pip install --quiet --upgrade pip
+python3 -m pip install --quiet capstone pefile unicorn
+python3 -c "import capstone, pefile, unicorn; print('deps ok:', capstone.__version__, pefile.__version__)"
+
 if [ ! -d pcrecomp/.git ]; then
   git clone --depth 1 --branch "$PCRE_TAG" "$PCRE" pcrecomp
 else
