@@ -13,7 +13,9 @@
 #include <windows.h>
 #else
 #include <sys/mman.h>
+#include <malloc.h>      // malloc_usable_size (glibc)
 #include <unistd.h>
+#include <sched.h>       // sched_yield
 #endif
 
 // ---- alocadores do host (bionic/mmap no Android; Win32/malloc no desktop) --

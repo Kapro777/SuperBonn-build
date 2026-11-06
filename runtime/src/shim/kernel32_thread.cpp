@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
+#include <sched.h>       // sched_yield
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
