@@ -33,7 +33,7 @@ extern const sb_entry_t  UPrecomp_dispatch_table[];
 extern const uint32_t    UPrecomp_dispatch_count;
 extern const sb_import_t UPrecomp_imports[];
 
-typedef struct { const char* name; uint64_t va; } sb_export_t;
+// (sb_export_t vem de multimod.h)
 
 uint64_t sb_load_pe(const char* path, uint64_t* out_base, uint32_t* out_size);
 uint64_t sb_load_pe_ex(const char* path, uint64_t* out_base, uint32_t* out_size,
