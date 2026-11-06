@@ -67,11 +67,24 @@ jobs:
           done
         shell: bash
 
-      # ---- compila o host (runtime, shims, loader) ---------------------------
-      - name: Compilar host
+      # ---- contagens + host ----------------------------------------------------
+      - name: Contagens e compilar host
         run: |
           set -euo pipefail
           mkdir -p build/host
+          python3 - <<'PY'
+          import re, pathlib
+          def count(p):
+              return sum(1 for l in open(p, encoding='utf-8', errors='replace')
+                         if re.match(r'\s*\{\s*0x', l))
+          hdr = ('#pragma once\n'
+                 'const uint32_t SB_EXE_IMPORTS = %d;\n'
+                 'const uint32_t SB_UP_IMPORTS = %d;\n') % (
+              count('lift/gen/Megabonk.exe/recomp_imports.c'),
+              count('lift/gen/UnityPlayer.dll/recomp_imports.c'))
+          pathlib.Path('build/host/sb_counts.h').write_text(hdr, encoding='utf-8')
+          print(hdr)
+          PY
           python3 scripts/rt/gen-shim-registry.py runtime/src/shim/kernel32_shims.h build/host/shim_registry.c
           I="-I tools/pcrecomp/runtime/recomp64_cpu -I lift/gen/Megabonk.exe \
              -I lift/gen/UnityPlayer.dll -I lift/gen/GameAssembly.dll -I lift/gen/baselib.dll \
@@ -88,24 +101,12 @@ jobs:
           echo "host compilado"
         shell: bash
 
-      # ---- link + contagens ---------------------------------------------------
-      - name: Gerar contagens e linkar
+      # ---- link ---------------------------------------------------------------
+      - name: Linkar
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import re, pathlib
-          def count(p):
-              return sum(1 for l in open(p, encoding='utf-8', errors='replace')
-                         if re.match(r'\s*\{\s*0x', l))
-          hdr = ('#pragma once\n'
-                 'const uint32_t SB_EXE_IMPORTS = %d;\n'
-                 'const uint32_t SB_UP_IMPORTS = %d;\n') % (
-              count('lift/gen/Megabonk.exe/recomp_imports.c'),
-              count('lift/gen/UnityPlayer.dll/recomp_imports.c'))
-          pathlib.Path('build/host/sb_counts.h').write_text(hdr, encoding='utf-8')
-          print(hdr)
-          PY
-          g++ -o build/sb_desktop lift/obj/*.o build/host/*.o -pthread -O1 -w
+          find lift/obj -name '*.o' -exec cp {} build/host/ \; 2>/dev/null || true
+          g++ -o build/sb_desktop build/host/*.o -pthread -O1 -w
           echo "link ok"
         shell: bash
 
